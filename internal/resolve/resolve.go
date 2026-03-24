@@ -20,6 +20,15 @@ type ResolvedItem struct {
 	Kind        string // "skill" or "agent"
 }
 
+// LinkName returns the filename to use for symlinks. Agents use .md extension;
+// skills use the bare name (they are directories).
+func (ri ResolvedItem) LinkName() string {
+	if ri.Kind == "agent" {
+		return ri.Name + ".md"
+	}
+	return ri.Name
+}
+
 // Items resolves all discovered skills and agents against the config.
 // If includeAll is true, items with no effective scopes are included.
 func Items(cfg *config.Config, discovered map[string][]source.Discovered, includeAll bool) (skills, agents []ResolvedItem) {

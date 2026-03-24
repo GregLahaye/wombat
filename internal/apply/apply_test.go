@@ -70,7 +70,7 @@ func TestApply_CreatesSymlinksAndSettings(t *testing.T) {
 	if _, err := os.Lstat(workSkill); err != nil {
 		t.Errorf("expected skill symlink at %s", workSkill)
 	}
-	workAgent := filepath.Join(cfg.Scopes["work"].Path, "agents", "my-agent")
+	workAgent := filepath.Join(cfg.Scopes["work"].Path, "agents", "my-agent.md")
 	if _, err := os.Lstat(workAgent); err != nil {
 		t.Errorf("expected agent symlink at %s", workAgent)
 	}

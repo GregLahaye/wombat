@@ -16,7 +16,7 @@ import (
 func syncSymlinks(cfg *config.Config, items []resolve.ResolvedItem, subdir string, r *Result) {
 	sourcesDir := config.SourcesDir()
 
-	// Build desired state: scope path -> item name -> target path.
+	// Build desired state: scope path -> link filename -> target path.
 	desired := make(map[string]map[string]string)
 	for _, item := range items {
 		absPath := filepath.Join(sourcesDir, item.SourceName, item.SourcePath)
@@ -27,6 +27,7 @@ func syncSymlinks(cfg *config.Config, items []resolve.ResolvedItem, subdir strin
 			scopes = []string{"global"}
 		}
 
+		ln := item.LinkName()
 		for _, scopeName := range scopes {
 			scope, ok := cfg.Scopes[scopeName]
 			if !ok {
@@ -35,7 +36,7 @@ func syncSymlinks(cfg *config.Config, items []resolve.ResolvedItem, subdir strin
 			if desired[scope.Path] == nil {
 				desired[scope.Path] = make(map[string]string)
 			}
-			desired[scope.Path][item.Name] = absPath
+			desired[scope.Path][ln] = absPath
 		}
 	}
 

@@ -133,7 +133,7 @@ func DoctorCmd() *cobra.Command {
 					}
 					for _, scopeName := range scopes {
 						scope := cfg.Scopes[scopeName]
-						link := filepath.Join(scope.Path, subdir, item.Name)
+						link := filepath.Join(scope.Path, subdir, item.LinkName())
 						desired[link] = true
 					}
 				}
