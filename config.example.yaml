@@ -1,0 +1,36 @@
+# Wombat configuration — manages Claude Code across scoped directories.
+# Copy this file to ~/wombat/config.yaml and customize.
+
+scopes:
+  work:
+    path: ~/work/.claude
+    settings_file: settings.local.json
+  global:
+    path: ~/.claude
+    settings_file: settings.json
+
+sources:
+  mattpocock-skills:
+    git: https://github.com/mattpocock/skills
+    default_scope: [work, global]
+    skill_paths: [skills]
+
+plugins:
+  superpowers@anthropics-skills:
+    enabled: [global]
+
+permissions:
+  allow:
+    - rule: "Read"
+      scopes: [global]
+    - rule: "Edit"
+      scopes: [global]
+    - rule: "Write"
+      scopes: [global]
+    - rule: "Bash"
+      scopes: [global]
+  deny:
+    - rule: "Bash(git push --force:*)"
+      scopes: [global]
+    - rule: "Bash(git reset --hard:*)"
+      scopes: [global]

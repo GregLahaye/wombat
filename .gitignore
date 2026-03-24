@@ -1,0 +1,12 @@
+# Binary
+/wombat
+
+# Test binaries
+*.test
+
+# OS files
+.DS_Store
+
+# User config and cloned sources
+config.yaml
+sources/
