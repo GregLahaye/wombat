@@ -175,6 +175,30 @@ TUI state is written to config on apply (`a`/`p`). The `original` snapshot detec
 9. **Shallow clones only**: Sources use `--depth 1`. No history is available. `source.Update` does `fetch --depth 1` + `reset --hard FETCH_HEAD`.
 10. **Agent discovery scans frontmatter**: Only the first 50 lines are checked for YAML frontmatter. Files without both `name:` and `description:` in frontmatter are skipped.
 11. **Scope removal is blocked by references**: You must remove all skills, agents, plugins, permissions, sources, and overrides referencing a scope before removing it.
+12. **Project dir propagation**: Non-global scopes create symlinks and settings in every git repo under the scope's parent directory. Always uses `settings.local.json` for project dirs to avoid git pollution.
+
+## Project directory propagation
+
+Non-global scopes propagate skills, agents, and settings to git project directories found under the scope's parent. Claude Code only reads skills/agents from `~/.claude/` (user) and `<project>/.claude/` (project root) — intermediate `.claude/` directories are invisible. Wombat bridges this gap.
+
+### How it works
+
+For each non-global scope (e.g., `tim` with path `~/tim/.claude`):
+1. `wombat apply` walks `~/tim/` recursively to find directories containing `.git`
+2. For each project found, creates symlinks in `<project>/.claude/skills/` and `<project>/.claude/agents/`
+3. Merges settings into `<project>/.claude/settings.local.json` (always `settings.local.json`, regardless of scope's `settings_file`)
+
+The walk skips hidden directories, `node_modules`, `vendor`, and stops at `.git` boundaries (doesn't descend into repos).
+
+### Global scope is exempt
+
+Items with "global" in their scopes only get symlinks at `~/.claude/`. Claude Code already reads this from everywhere — no propagation needed.
+
+### Limitations
+
+- No per-project exclusion. A scope applies to ALL projects under it.
+- Symlinks appear in `git status`. Add `.claude/skills/` and `.claude/agents/` to `.gitignore` if desired.
+- New projects require `wombat apply` to get symlinks.
 
 ## Build and test
 
