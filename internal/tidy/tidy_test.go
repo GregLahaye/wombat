@@ -220,6 +220,43 @@ func TestScan_NoGlobalScope_NoPromotion(t *testing.T) {
 	}
 }
 
+func TestScan_SkipsWombatManagedRules(t *testing.T) {
+	root := t.TempDir()
+	scopePath := filepath.Join(root, ".claude")
+	os.MkdirAll(scopePath, 0o755)
+
+	writeProjectSettings(t, filepath.Join(root, "project-a"), "settings.local.json", map[string]any{
+		"permissions": map[string]any{
+			"allow": []any{"Read", "CustomRule"},
+		},
+	})
+
+	cfg := &config.Config{
+		Scopes: map[string]config.Scope{
+			"work":   {Path: scopePath, SettingsFile: "settings.local.json"},
+			"global": {Path: filepath.Join(t.TempDir(), ".claude"), SettingsFile: "settings.json"},
+		},
+		Permissions: config.Permissions{
+			Allow: []config.PermissionRule{{Rule: "Read", Scopes: []string{"work"}}},
+		},
+	}
+	cfg.EnsureMaps()
+
+	result, err := Scan(cfg)
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+
+	for _, rec := range result.Recommendations {
+		if rec.Rule == "Read" {
+			t.Errorf("should not recommend 'Read' — already managed by wombat")
+		}
+	}
+	if len(result.Recommendations) != 1 {
+		t.Errorf("expected 1 recommendation (CustomRule only), got %d", len(result.Recommendations))
+	}
+}
+
 func TestApplyRecommendations_RemovesEmptyPermissions(t *testing.T) {
 	root := t.TempDir()
 	projDir := filepath.Join(root, "project")

@@ -66,12 +66,33 @@ func Scan(cfg *config.Config) (*ScanResult, error) {
 		}
 	}
 
+	// Build set of rules already managed by wombat per scope.
+	managedRules := make(map[string]map[string]bool)
+	for _, scopeName := range cfg.ScopeNames() {
+		m := make(map[string]bool)
+		for _, r := range cfg.Permissions.Allow {
+			if slices.Contains(r.Scopes, scopeName) {
+				m["allow\x00"+r.Rule] = true
+			}
+		}
+		for _, r := range cfg.Permissions.Deny {
+			if slices.Contains(r.Scopes, scopeName) {
+				m["deny\x00"+r.Rule] = true
+			}
+		}
+		managedRules[scopeName] = m
+	}
+
 	// Step 1: Any project-level permission -> scope level.
 	type ruleKey struct{ rule, kind string }
 	for scopeName, projects := range scopeProjects {
+		managed := managedRules[scopeName]
 		for _, kind := range []string{"allow", "deny"} {
 			counts := countRules(projects, kind)
 			for rule, paths := range counts {
+				if managed[kind+"\x00"+rule] {
+					continue
+				}
 				result.Recommendations = append(result.Recommendations, Recommendation{
 					Rule:        rule,
 					Type:        kind,
