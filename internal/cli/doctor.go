@@ -109,6 +109,17 @@ func DoctorCmd() *cobra.Command {
 
 			// Discover all items (once — reused for collision check and symlink check).
 			discovered := apply.DiscoverAll(cfg)
+			projDirs := apply.DiscoverAllProjectDirs(cfg)
+
+			// Report discovered projects in verbose mode.
+			for _, scopeName := range cfg.ScopeNames() {
+				if scopeName == "global" {
+					continue
+				}
+				if dirs := projDirs[scopeName]; len(dirs) > 0 {
+					report("info", fmt.Sprintf("scope %q: %d project(s) discovered", scopeName, len(dirs)))
+				}
+			}
 
 			// Check for name collisions across sources (same kind only).
 			nameSource := make(map[string]string) // "kind\x00name" -> first source
@@ -141,6 +152,10 @@ func DoctorCmd() *cobra.Command {
 						scope := cfg.Scopes[scopeName]
 						link := filepath.Join(scope.Path, subdir, item.LinkName())
 						desired[link] = true
+						for _, projDir := range projDirs[scopeName] {
+							link := filepath.Join(projDir, subdir, item.LinkName())
+							desired[link] = true
+						}
 					}
 				}
 			}
@@ -188,8 +203,41 @@ func DoctorCmd() *cobra.Command {
 				}
 			}
 
+			// Check for unmanaged symlinks in project dirs.
+			for scopeName := range cfg.Scopes {
+				if scopeName == "global" {
+					continue
+				}
+				for _, projDir := range projDirs[scopeName] {
+					for _, subdir := range []string{"skills", "agents"} {
+						dir := filepath.Join(projDir, subdir)
+						entries, err := os.ReadDir(dir)
+						if err != nil {
+							continue
+						}
+						for _, entry := range entries {
+							link := filepath.Join(dir, entry.Name())
+							target, err := os.Readlink(link)
+							if err != nil {
+								continue
+							}
+							if !filepath.IsAbs(target) {
+								target = filepath.Join(dir, target)
+							}
+							target = filepath.Clean(target)
+							if !strings.HasPrefix(target, sourcesPrefix) {
+								continue
+							}
+							if !desired[link] {
+								report("warning", fmt.Sprintf("unmanaged symlink: %s -> %s", link, target))
+							}
+						}
+					}
+				}
+			}
+
 			// Check settings drift.
-			drifted, _ := apply.CheckSettings(cfg, nil)
+			drifted, _ := apply.CheckSettings(cfg, projDirs)
 			slices.Sort(drifted)
 			for _, name := range drifted {
 				report("warning", fmt.Sprintf("scope %q: settings drift (run wombat apply)", name))
