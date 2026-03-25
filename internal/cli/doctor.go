@@ -128,6 +128,11 @@ func DoctorCmd() *cobra.Command {
 			desired := make(map[string]bool)
 			addDesired := func(items []resolve.ResolvedItem, subdir string) {
 				for _, item := range items {
+					// Skip items with no SourcePath (manually configured but not
+					// discovered). syncSymlinks also skips these — no symlink exists.
+					if item.SourcePath == "" {
+						continue
+					}
 					scopes := item.Scopes
 					if slices.Contains(scopes, "global") {
 						scopes = []string{"global"}

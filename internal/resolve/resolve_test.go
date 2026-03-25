@@ -203,6 +203,36 @@ func TestItems_ExplicitEntryNotDiscovered(t *testing.T) {
 	}
 }
 
+func TestItems_ExplicitEntryHasEmptySourcePath(t *testing.T) {
+	// Explicit config entries that aren't discovered have empty SourcePath.
+	// Callers (doctor, syncSymlinks) must check for this to avoid creating
+	// symlinks with invalid targets.
+	cfg := &config.Config{
+		Sources: map[string]config.Source{
+			"my-source": {Git: "https://example.com/repo", DefaultScope: []string{"work"}},
+		},
+		Scopes: map[string]config.Scope{
+			"work": {Path: "/tmp/work/.claude", SettingsFile: "settings.json"},
+		},
+		Skills: map[string]config.Item{
+			"manual-skill": {Source: "my-source", Enabled: []string{"work"}},
+		},
+	}
+	cfg.EnsureMaps()
+
+	discovered := map[string][]source.Discovered{
+		"my-source": {},
+	}
+
+	skills, _ := Items(cfg, discovered, false)
+	if len(skills) != 1 {
+		t.Fatalf("expected 1 skill, got %d", len(skills))
+	}
+	if skills[0].SourcePath != "" {
+		t.Errorf("expected empty SourcePath for undiscovered explicit entry, got %q", skills[0].SourcePath)
+	}
+}
+
 func TestItems_IncludeAll(t *testing.T) {
 	cfg := &config.Config{
 		Sources: map[string]config.Source{
