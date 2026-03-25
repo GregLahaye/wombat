@@ -35,7 +35,7 @@ func TestSyncSymlinks_CreatesSymlinks(t *testing.T) {
 	}
 
 	r := &Result{}
-	syncSymlinks(cfg, items, "skills", r)
+	syncSymlinks(cfg, items, "skills", r, nil)
 
 	if len(r.Errors) > 0 {
 		t.Fatalf("unexpected errors: %v", r.Errors)
@@ -79,7 +79,7 @@ func TestSyncSymlinks_SkipsEmptySourcePath(t *testing.T) {
 	}
 
 	r := &Result{}
-	syncSymlinks(cfg, items, "skills", r)
+	syncSymlinks(cfg, items, "skills", r, nil)
 
 	if len(r.Created) != 0 {
 		t.Errorf("expected 0 created for empty SourcePath, got %d: %v", len(r.Created), r.Created)
@@ -111,7 +111,7 @@ func TestSyncSymlinks_RemovesStaleSymlinks(t *testing.T) {
 
 	// No items desired — old-skill should be removed.
 	r := &Result{}
-	syncSymlinks(cfg, nil, "skills", r)
+	syncSymlinks(cfg, nil, "skills", r, nil)
 
 	if len(r.Removed) != 1 {
 		t.Fatalf("expected 1 removed, got %d: %v", len(r.Removed), r.Removed)
@@ -143,7 +143,7 @@ func TestSyncSymlinks_PreservesNonSourceSymlinks(t *testing.T) {
 	cfg.EnsureMaps()
 
 	r := &Result{}
-	syncSymlinks(cfg, nil, "skills", r)
+	syncSymlinks(cfg, nil, "skills", r, nil)
 
 	// Should NOT be removed (not managed by wombat).
 	if len(r.Removed) != 0 {
@@ -182,7 +182,7 @@ func TestSyncSymlinks_GlobalOptimization(t *testing.T) {
 	}
 
 	r := &Result{}
-	syncSymlinks(cfg, items, "skills", r)
+	syncSymlinks(cfg, items, "skills", r, nil)
 
 	if len(r.Created) != 1 {
 		t.Fatalf("expected 1 created (global only), got %d: %v", len(r.Created), r.Created)

@@ -46,45 +46,85 @@ func WriteSettings(path string, data map[string]any) error {
 }
 
 // syncSettings merges plugins and permissions into each scope's settings file.
-func syncSettings(cfg, prevCfg *config.Config, r *Result) error {
+// projDirs maps scope names to project .claude directories for propagation.
+func syncSettings(cfg, prevCfg *config.Config, r *Result, projDirs map[string][]string) error {
 	for _, scopeName := range cfg.ScopeNames() {
 		scope := cfg.Scopes[scopeName]
+
+		// Merge for scope dir.
 		path := filepath.Join(scope.Path, scope.SettingsFile)
 		data, err := ReadSettings(path)
 		if err != nil {
 			return fmt.Errorf("reading %s: %w", path, err)
 		}
-
 		changed := mergePlugins(data, cfg, prevCfg, scopeName)
 		changed = mergePermissions(data, cfg, prevCfg, scopeName) || changed
-
 		if changed {
 			if err := WriteSettings(path, data); err != nil {
 				return fmt.Errorf("writing %s: %w", path, err)
 			}
 			r.Updated = append(r.Updated, path)
 		}
+
+		// Propagate to project dirs (always settings.local.json).
+		for _, projDir := range projDirs[scopeName] {
+			projPath := filepath.Join(projDir, "settings.local.json")
+			projData, err := ReadSettings(projPath)
+			if err != nil {
+				r.Errors = append(r.Errors, fmt.Errorf("reading %s: %w", projPath, err))
+				continue
+			}
+			projChanged := mergePlugins(projData, cfg, prevCfg, scopeName)
+			projChanged = mergePermissions(projData, cfg, prevCfg, scopeName) || projChanged
+			if projChanged {
+				if err := WriteSettings(projPath, projData); err != nil {
+					r.Errors = append(r.Errors, fmt.Errorf("writing %s: %w", projPath, err))
+					continue
+				}
+				r.Updated = append(r.Updated, projPath)
+			}
+		}
 	}
 	return nil
 }
 
 // CheckSettings does a dry-run merge and returns scope names with drift.
-func CheckSettings(cfg *config.Config) ([]string, error) {
+// projDirs maps scope names to project .claude directories for drift checking.
+func CheckSettings(cfg *config.Config, projDirs map[string][]string) ([]string, error) {
 	var drifted []string
 	for _, scopeName := range cfg.ScopeNames() {
 		scope := cfg.Scopes[scopeName]
+
+		// Check scope dir (errors are fatal).
 		path := filepath.Join(scope.Path, scope.SettingsFile)
 		data, err := ReadSettings(path)
 		if err != nil {
 			return nil, fmt.Errorf("reading %s: %w", path, err)
 		}
-
 		clone := cloneMap(data)
 		if clone == nil {
 			clone = make(map[string]any)
 		}
 		if mergePlugins(clone, cfg, nil, scopeName) || mergePermissions(clone, cfg, nil, scopeName) {
 			drifted = append(drifted, scopeName)
+			continue
+		}
+
+		// Check project dirs (errors non-fatal).
+		for _, projDir := range projDirs[scopeName] {
+			projPath := filepath.Join(projDir, "settings.local.json")
+			projData, err := ReadSettings(projPath)
+			if err != nil {
+				continue
+			}
+			projClone := cloneMap(projData)
+			if projClone == nil {
+				projClone = make(map[string]any)
+			}
+			if mergePlugins(projClone, cfg, nil, scopeName) || mergePermissions(projClone, cfg, nil, scopeName) {
+				drifted = append(drifted, scopeName)
+				break
+			}
 		}
 	}
 	return drifted, nil

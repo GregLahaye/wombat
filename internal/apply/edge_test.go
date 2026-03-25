@@ -92,7 +92,7 @@ func TestSyncSettings_CreatesDirectoryIfNeeded(t *testing.T) {
 	cfg.EnsureMaps()
 
 	r := &Result{}
-	err := syncSettings(cfg, nil, r)
+	err := syncSettings(cfg, nil, r, nil)
 	if err != nil {
 		t.Fatalf("syncSettings should create dirs: %v", err)
 	}

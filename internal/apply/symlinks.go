@@ -12,48 +12,48 @@ import (
 )
 
 // syncSymlinks creates and removes symlinks for resolved items.
-// Only removes symlinks pointing into the sources/ directory (partial ownership).
-func syncSymlinks(cfg *config.Config, items []resolve.ResolvedItem, subdir string, r *Result) {
+// projDirs maps scope names to project .claude directories for propagation.
+func syncSymlinks(cfg *config.Config, items []resolve.ResolvedItem, subdir string, r *Result, projDirs map[string][]string) {
 	sourcesDir := config.SourcesDir()
 
-	// Build desired state: scope path -> link filename -> target path.
+	// Build desired state: .claude path -> link filename -> target path.
 	desired := make(map[string]map[string]string)
+	addDesired := func(claudePath, linkName, target string) {
+		if desired[claudePath] == nil {
+			desired[claudePath] = make(map[string]string)
+		}
+		desired[claudePath][linkName] = target
+	}
+
 	for _, item := range items {
-		// Skip items with no SourcePath (from addExplicit when configured
-		// but not discovered). We can't create a valid symlink without
-		// knowing the item's path within the source repo.
 		if item.SourcePath == "" {
 			continue
 		}
 		absPath := filepath.Join(sourcesDir, item.SourceName, item.SourcePath)
 		scopes := item.Scopes
-
-		// Global optimization: if "global" is in scopes, only create at global.
 		if slices.Contains(scopes, "global") {
 			scopes = []string{"global"}
 		}
-
 		ln := item.LinkName()
 		for _, scopeName := range scopes {
 			scope, ok := cfg.Scopes[scopeName]
 			if !ok {
 				continue
 			}
-			if desired[scope.Path] == nil {
-				desired[scope.Path] = make(map[string]string)
+			addDesired(scope.Path, ln, absPath)
+			for _, projDir := range projDirs[scopeName] {
+				addDesired(projDir, ln, absPath)
 			}
-			desired[scope.Path][ln] = absPath
 		}
 	}
 
 	// Create/update desired symlinks.
-	for scopePath, items := range desired {
-		dir := filepath.Join(scopePath, subdir)
+	for claudePath, items := range desired {
+		dir := filepath.Join(claudePath, subdir)
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			r.Errors = append(r.Errors, fmt.Errorf("creating %s: %w", dir, err))
 			continue
 		}
-
 		for name, target := range items {
 			link := filepath.Join(dir, name)
 			created, err := ensureSymlink(link, target)
@@ -69,28 +69,26 @@ func syncSymlinks(cfg *config.Config, items []resolve.ResolvedItem, subdir strin
 
 	// Remove stale symlinks (only those pointing into sources/).
 	sourcesPrefix := filepath.Clean(sourcesDir) + string(filepath.Separator)
-	for _, scope := range cfg.Scopes {
-		dir := filepath.Join(scope.Path, subdir)
+	cleanStale := func(claudePath string) {
+		dir := filepath.Join(claudePath, subdir)
 		entries, err := os.ReadDir(dir)
 		if err != nil {
-			continue
+			return
 		}
-
 		for _, entry := range entries {
 			link := filepath.Join(dir, entry.Name())
 			target, err := os.Readlink(link)
 			if err != nil {
-				continue // Not a symlink.
+				continue
 			}
-			// Resolve relative targets to absolute for comparison.
 			if !filepath.IsAbs(target) {
 				target = filepath.Join(dir, target)
 			}
 			target = filepath.Clean(target)
 			if !strings.HasPrefix(target, sourcesPrefix) {
-				continue // Not managed by wombat.
+				continue
 			}
-			if d, ok := desired[scope.Path]; ok {
+			if d, ok := desired[claudePath]; ok {
 				if _, wanted := d[entry.Name()]; wanted {
 					continue
 				}
@@ -98,6 +96,15 @@ func syncSymlinks(cfg *config.Config, items []resolve.ResolvedItem, subdir strin
 			if err := os.Remove(link); err == nil {
 				r.Removed = append(r.Removed, link)
 			}
+		}
+	}
+
+	for _, scope := range cfg.Scopes {
+		cleanStale(scope.Path)
+	}
+	for _, dirs := range projDirs {
+		for _, d := range dirs {
+			cleanStale(d)
 		}
 	}
 }

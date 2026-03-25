@@ -29,10 +29,12 @@ func Apply(cfg, prevCfg *config.Config) (*Result, error) {
 	discovered := DiscoverAll(cfg)
 	skills, agents := resolve.Items(cfg, discovered, false)
 
-	syncSymlinks(cfg, skills, "skills", r)
-	syncSymlinks(cfg, agents, "agents", r)
+	projDirs := DiscoverAllProjectDirs(cfg)
 
-	if err := syncSettings(cfg, prevCfg, r); err != nil {
+	syncSymlinks(cfg, skills, "skills", r, projDirs)
+	syncSymlinks(cfg, agents, "agents", r, projDirs)
+
+	if err := syncSettings(cfg, prevCfg, r, projDirs); err != nil {
 		return r, err
 	}
 

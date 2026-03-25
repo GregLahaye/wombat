@@ -189,7 +189,7 @@ func DoctorCmd() *cobra.Command {
 			}
 
 			// Check settings drift.
-			drifted, _ := apply.CheckSettings(cfg)
+			drifted, _ := apply.CheckSettings(cfg, nil)
 			slices.Sort(drifted)
 			for _, name := range drifted {
 				report("warning", fmt.Sprintf("scope %q: settings drift (run wombat apply)", name))
