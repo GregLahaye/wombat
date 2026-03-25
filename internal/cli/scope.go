@@ -39,6 +39,7 @@ func scopeAddCmd() *cobra.Command {
 				return fmt.Errorf("scope %q already exists", name)
 			}
 
+			scopePath = filepath.Clean(scopePath)
 			if !strings.HasSuffix(scopePath, ".claude") {
 				scopePath = filepath.Join(scopePath, ".claude")
 			}

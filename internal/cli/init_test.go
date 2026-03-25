@@ -1,6 +1,38 @@
 package cli
 
-import "testing"
+import (
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// appendClaudeIfMissing mirrors the logic in scope add and init.
+func appendClaudeIfMissing(p string) string {
+	p = filepath.Clean(p)
+	if !strings.HasSuffix(p, ".claude") {
+		p = filepath.Join(p, ".claude")
+	}
+	return p
+}
+
+func TestAppendClaude_TrailingSlash(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"~/work", "~/work/.claude"},
+		{"~/work/.claude", "~/work/.claude"},
+		{"~/work/.claude/", "~/work/.claude"},       // trailing slash
+		{"/work/.claude///", "/work/.claude"},        // multiple trailing slashes
+		{"/work/not-claude", "/work/not-claude/.claude"},
+	}
+	for _, tt := range tests {
+		got := appendClaudeIfMissing(tt.input)
+		if got != tt.want {
+			t.Errorf("appendClaudeIfMissing(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
 
 func TestSourceNameFromURL(t *testing.T) {
 	tests := []struct {

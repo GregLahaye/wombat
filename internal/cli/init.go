@@ -52,6 +52,7 @@ func runInit() error {
 		if path == "" {
 			continue
 		}
+		path = filepath.Clean(path)
 		if !strings.HasSuffix(path, ".claude") {
 			path = filepath.Join(path, ".claude")
 		}
