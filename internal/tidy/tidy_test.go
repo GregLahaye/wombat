@@ -257,6 +257,51 @@ func TestScan_SkipsWombatManagedRules(t *testing.T) {
 	}
 }
 
+func TestScan_SkipsManagedRulesInGlobalPromotion(t *testing.T) {
+	root1 := t.TempDir()
+	root2 := t.TempDir()
+	scopePath1 := filepath.Join(root1, ".claude")
+	scopePath2 := filepath.Join(root2, ".claude")
+	os.MkdirAll(scopePath1, 0o755)
+	os.MkdirAll(scopePath2, 0o755)
+
+	// "Read" is in projects under BOTH scopes — normally promoted to global.
+	writeProjectSettings(t, filepath.Join(root1, "proj"), "settings.local.json", map[string]any{
+		"permissions": map[string]any{"allow": []any{"Read"}},
+	})
+	writeProjectSettings(t, filepath.Join(root2, "proj"), "settings.local.json", map[string]any{
+		"permissions": map[string]any{"allow": []any{"Read"}},
+	})
+
+	cfg := &config.Config{
+		Scopes: map[string]config.Scope{
+			"work":     {Path: scopePath1, SettingsFile: "settings.local.json"},
+			"personal": {Path: scopePath2, SettingsFile: "settings.local.json"},
+			"global":   {Path: filepath.Join(t.TempDir(), ".claude"), SettingsFile: "settings.json"},
+		},
+		Permissions: config.Permissions{
+			// "Read" is already managed by wombat for both scopes.
+			Allow: []config.PermissionRule{{Rule: "Read", Scopes: []string{"work", "personal"}}},
+		},
+	}
+	cfg.EnsureMaps()
+
+	result, err := Scan(cfg)
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+
+	// "Read" should NOT be recommended for global promotion — already managed.
+	for _, rec := range result.Recommendations {
+		if rec.Rule == "Read" {
+			t.Errorf("should not recommend 'Read' for %s — already managed by wombat", rec.TargetScope)
+		}
+	}
+	if len(result.Recommendations) != 0 {
+		t.Errorf("expected 0 recommendations, got %d: %v", len(result.Recommendations), result.Recommendations)
+	}
+}
+
 func TestApplyRecommendations_RemovesEmptyPermissions(t *testing.T) {
 	root := t.TempDir()
 	projDir := filepath.Join(root, "project")

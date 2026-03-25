@@ -115,8 +115,12 @@ func Scan(cfg *config.Config) (*ScanResult, error) {
 		type sr struct{ kind, rule string }
 		ruleScopes := make(map[sr][]string)
 		for scopeName, projects := range scopeProjects {
+			managed := managedRules[scopeName]
 			for _, kind := range []string{"allow", "deny"} {
 				for rule := range countRules(projects, kind) {
+					if managed[kind+"\x00"+rule] {
+						continue
+					}
 					key := sr{kind, rule}
 					ruleScopes[key] = append(ruleScopes[key], scopeName)
 				}
