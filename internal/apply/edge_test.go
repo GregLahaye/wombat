@@ -178,4 +178,22 @@ func TestMergePermissions_MixedTypes(t *testing.T) {
 	if !hasRead || !hasBash {
 		t.Errorf("expected Read and Bash in allow, got %v", allow)
 	}
+
+	// Verify non-string entry (42) was preserved.
+	hasNonString := false
+	for _, v := range allow {
+		switch n := v.(type) {
+		case int:
+			if n == 42 {
+				hasNonString = true
+			}
+		case float64:
+			if n == 42 {
+				hasNonString = true
+			}
+		}
+	}
+	if !hasNonString {
+		t.Errorf("non-string entry 42 was lost, got %v", allow)
+	}
 }

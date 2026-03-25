@@ -210,11 +210,18 @@ func mergeRuleList(perms map[string]any, key string, rules, prevRules []config.P
 	}
 
 	if changed {
-		if len(result) > 0 {
-			anySlice := make([]any, len(result))
-			for i, r := range result {
-				anySlice[i] = r
+		// Preserve non-string entries from the original array.
+		raw, _ := perms[key].([]any)
+		var anySlice []any
+		for _, v := range raw {
+			if _, ok := v.(string); !ok {
+				anySlice = append(anySlice, v)
 			}
+		}
+		for _, r := range result {
+			anySlice = append(anySlice, r)
+		}
+		if len(anySlice) > 0 {
 			perms[key] = anySlice
 		} else {
 			delete(perms, key)
