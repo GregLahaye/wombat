@@ -110,14 +110,15 @@ func DoctorCmd() *cobra.Command {
 			// Discover all items (once — reused for collision check and symlink check).
 			discovered := apply.DiscoverAll(cfg)
 
-			// Check for name collisions across sources.
-			nameSource := make(map[string]string) // item name -> first source
+			// Check for name collisions across sources (same kind only).
+			nameSource := make(map[string]string) // "kind\x00name" -> first source
 			for _, srcName := range cfg.SortedSourceNames() {
 				for _, item := range discovered[srcName] {
-					if first, exists := nameSource[item.Name]; exists {
+					key := item.Kind + "\x00" + item.Name
+					if first, exists := nameSource[key]; exists {
 						report("warning", fmt.Sprintf("%s %q found in both %s and %s (using %s)", item.Kind, item.Name, first, srcName, first))
 					} else {
-						nameSource[item.Name] = srcName
+						nameSource[key] = srcName
 					}
 				}
 			}

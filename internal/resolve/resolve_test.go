@@ -153,6 +153,31 @@ func TestItems_NameCollision(t *testing.T) {
 	}
 }
 
+func TestItems_SkillAndAgentSameName(t *testing.T) {
+	cfg := &config.Config{
+		Sources: map[string]config.Source{
+			"my-source": {Git: "https://example.com/repo", DefaultScope: []string{"work"}},
+		},
+	}
+	cfg.EnsureMaps()
+
+	// A skill and agent with the same name should both be resolved.
+	discovered := map[string][]source.Discovered{
+		"my-source": {
+			{Name: "helper", Path: "helper", Kind: "skill"},
+			{Name: "helper", Path: "agents/helper.md", Kind: "agent"},
+		},
+	}
+
+	skills, agents := Items(cfg, discovered, false)
+	if len(skills) != 1 {
+		t.Errorf("expected 1 skill, got %d", len(skills))
+	}
+	if len(agents) != 1 {
+		t.Errorf("expected 1 agent, got %d", len(agents))
+	}
+}
+
 func TestItems_ExplicitEntryNotDiscovered(t *testing.T) {
 	cfg := &config.Config{
 		Sources: map[string]config.Source{

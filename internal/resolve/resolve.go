@@ -38,10 +38,11 @@ func Items(cfg *config.Config, discovered map[string][]source.Discovered, includ
 	for _, srcName := range slices.Sorted(maps.Keys(cfg.Sources)) {
 		src := cfg.Sources[srcName]
 		for _, item := range discovered[srcName] {
-			if resolved[item.Name] {
+			key := item.Kind + "\x00" + item.Name
+			if resolved[key] {
 				continue
 			}
-			resolved[item.Name] = true
+			resolved[key] = true
 
 			scopes, inherited := EffectiveScopes(cfg, item.Name, srcName, src.DefaultScope, item.Kind)
 			if len(scopes) == 0 && !includeAll {
@@ -109,10 +110,11 @@ func EffectiveScopes(cfg *config.Config, name, srcName string, defaultScope []st
 
 func addExplicit(cfg *config.Config, resolved []ResolvedItem, items map[string]config.Item, kind string, seen map[string]bool, includeAll bool) []ResolvedItem {
 	for _, name := range slices.Sorted(maps.Keys(items)) {
-		if seen[name] {
+		key := kind + "\x00" + name
+		if seen[key] {
 			continue
 		}
-		seen[name] = true
+		seen[key] = true
 		item := items[name]
 
 		// Look up source default_scope for fall-through.
