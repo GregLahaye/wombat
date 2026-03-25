@@ -128,6 +128,51 @@ func TestContractPath_EdgeCases(t *testing.T) {
 	}
 }
 
+func TestLoadSave_PreservesItemEnabledNilVsEmpty(t *testing.T) {
+	// This is the most critical round-trip invariant in the codebase.
+	// nil Enabled = "inherit from default_scope", empty = "explicitly disabled".
+	// A lossy round-trip silently changes item behavior.
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+
+	cfg := &Config{
+		Scopes:  map[string]Scope{"work": {Path: "/work", SettingsFile: "s.json"}},
+		Sources: map[string]Source{"src": {Git: "https://example.com"}},
+		Skills: map[string]Item{
+			"inherited": {Source: "src"},                             // nil Enabled
+			"disabled":  {Source: "src", Enabled: []string{}},       // empty Enabled
+			"enabled":   {Source: "src", Enabled: []string{"work"}}, // non-empty Enabled
+		},
+	}
+	cfg.EnsureMaps()
+
+	if err := cfg.Save(path); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	inherited := loaded.Skills["inherited"]
+	if inherited.Enabled != nil {
+		t.Errorf("inherited: expected Enabled=nil (inherit), got %v", inherited.Enabled)
+	}
+
+	disabled := loaded.Skills["disabled"]
+	if disabled.Enabled == nil {
+		t.Error("disabled: expected Enabled=[] (disabled), got nil (would inherit)")
+	} else if len(disabled.Enabled) != 0 {
+		t.Errorf("disabled: expected empty Enabled, got %v", disabled.Enabled)
+	}
+
+	enabled := loaded.Skills["enabled"]
+	if len(enabled.Enabled) != 1 || enabled.Enabled[0] != "work" {
+		t.Errorf("enabled: expected [work], got %v", enabled.Enabled)
+	}
+}
+
 func TestLoadSave_PreservesEmptySlices(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
