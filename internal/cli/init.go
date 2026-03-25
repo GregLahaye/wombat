@@ -310,6 +310,10 @@ func addPermRule(cfg *config.Config, rule, kind, scopeName string) {
 
 func sourceNameFromURL(url string) string {
 	url = strings.TrimSuffix(url, ".git")
+	// Handle SSH URLs: git@github.com:owner/repo → owner/repo
+	if i := strings.Index(url, ":"); i > 0 && !strings.Contains(url[:i], "/") {
+		url = url[i+1:]
+	}
 	parts := strings.Split(url, "/")
 	if len(parts) >= 2 {
 		return parts[len(parts)-2] + "-" + parts[len(parts)-1]
