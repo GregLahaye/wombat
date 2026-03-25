@@ -3,6 +3,7 @@ package apply
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/GregLahaye/wombat/internal/config"
@@ -160,6 +161,34 @@ func TestSyncSymlinks_GlobalOptimization(t *testing.T) {
 	}
 	if _, err := os.Lstat(filepath.Join(workPath, "skills", "my-skill")); err == nil {
 		t.Error("did not expect symlink at work scope (global optimization)")
+	}
+}
+
+func TestEnsureSymlink_RegularFileBlocks(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target")
+	os.MkdirAll(target, 0o755)
+	link := filepath.Join(dir, "blocker")
+
+	// Create a regular file where the symlink should go.
+	os.WriteFile(link, []byte("I am a regular file"), 0o644)
+
+	_, err := ensureSymlink(link, target)
+	if err == nil {
+		t.Fatal("expected error when regular file blocks symlink, got nil")
+	}
+	// Error should mention that a non-symlink file is blocking.
+	if !strings.Contains(err.Error(), "non-symlink") {
+		t.Errorf("error should mention non-symlink file, got: %v", err)
+	}
+
+	// Original file should be preserved (not deleted).
+	data, readErr := os.ReadFile(link)
+	if readErr != nil {
+		t.Fatalf("regular file was deleted: %v", readErr)
+	}
+	if string(data) != "I am a regular file" {
+		t.Error("regular file contents were modified")
 	}
 }
 

@@ -106,6 +106,9 @@ func ensureSymlink(link, target string) (bool, error) {
 		if err := os.Remove(link); err != nil {
 			return false, fmt.Errorf("removing old symlink: %w", err)
 		}
+	} else if _, statErr := os.Lstat(link); statErr == nil {
+		// Path exists but is not a symlink (regular file or directory).
+		return false, fmt.Errorf("non-symlink file exists at %s (remove manually)", link)
 	}
 
 	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
