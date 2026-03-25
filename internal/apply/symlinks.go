@@ -19,6 +19,12 @@ func syncSymlinks(cfg *config.Config, items []resolve.ResolvedItem, subdir strin
 	// Build desired state: scope path -> link filename -> target path.
 	desired := make(map[string]map[string]string)
 	for _, item := range items {
+		// Skip items with no SourcePath (from addExplicit when configured
+		// but not discovered). We can't create a valid symlink without
+		// knowing the item's path within the source repo.
+		if item.SourcePath == "" {
+			continue
+		}
 		absPath := filepath.Join(sourcesDir, item.SourceName, item.SourcePath)
 		scopes := item.Scopes
 

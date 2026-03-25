@@ -54,6 +54,38 @@ func TestSyncSymlinks_CreatesSymlinks(t *testing.T) {
 	}
 }
 
+func TestSyncSymlinks_SkipsEmptySourcePath(t *testing.T) {
+	dir := t.TempDir()
+	scopePath := filepath.Join(dir, "scope")
+	sourcesDir := filepath.Join(dir, "sources")
+	os.MkdirAll(filepath.Join(sourcesDir, "my-source"), 0o755)
+
+	origDir := os.Getenv("WOMBAT_HOME")
+	os.Setenv("WOMBAT_HOME", dir)
+	defer os.Setenv("WOMBAT_HOME", origDir)
+
+	cfg := &config.Config{
+		Scopes: map[string]config.Scope{
+			"work": {Path: scopePath, SettingsFile: "settings.json"},
+		},
+	}
+	cfg.EnsureMaps()
+
+	// Items with empty SourcePath (from addExplicit when item is configured
+	// but not discovered) should not create symlinks pointing to the source root.
+	items := []resolve.ResolvedItem{
+		{Name: "ghost-skill", SourceName: "my-source", SourcePath: "", Scopes: []string{"work"}, Kind: "skill"},
+		{Name: "ghost-agent", SourceName: "my-source", SourcePath: "", Scopes: []string{"work"}, Kind: "agent"},
+	}
+
+	r := &Result{}
+	syncSymlinks(cfg, items, "skills", r)
+
+	if len(r.Created) != 0 {
+		t.Errorf("expected 0 created for empty SourcePath, got %d: %v", len(r.Created), r.Created)
+	}
+}
+
 func TestSyncSymlinks_RemovesStaleSymlinks(t *testing.T) {
 	dir := t.TempDir()
 	scopePath := filepath.Join(dir, "scope")
