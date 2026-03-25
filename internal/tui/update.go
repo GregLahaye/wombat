@@ -370,5 +370,8 @@ func (m *Model) deletePermissionRule() {
 }
 
 func scopeMapToSlice(m map[string]bool) []string {
+	if len(m) == 0 {
+		return []string{} // Explicitly empty, not nil (nil means "inherit").
+	}
 	return slices.Sorted(maps.Keys(m))
 }

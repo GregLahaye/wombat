@@ -124,8 +124,14 @@ func runInit() error {
 				if err != nil {
 					continue
 				}
+				name := entry.Name()
+				// Agent symlinks have .md extension; strip it for the config key
+				// so it matches the discovered item name.
+				if kind == "agent" {
+					name = strings.TrimSuffix(name, ".md")
+				}
 				allSymlinks = append(allSymlinks, symlink{
-					scope: scopeName, name: entry.Name(), kind: kind,
+					scope: scopeName, name: name, kind: kind,
 					link: link, repoURL: strings.TrimSuffix(url, ".git"),
 				})
 			}

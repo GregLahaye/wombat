@@ -53,6 +53,72 @@ func TestYAMLOmitEmpty_PermissionsOnlyAllow(t *testing.T) {
 	}
 }
 
+func TestYAML_ItemEnabledNilVsEmpty(t *testing.T) {
+	// nil Enabled means "inherit from default_scope" — field must be omitted.
+	// empty Enabled means "explicitly disabled" — field must be present as [].
+	// This distinction is load-bearing; mixing them up silently changes behavior.
+
+	nilItem := Item{Source: "src", Enabled: nil}
+	emptyItem := Item{Source: "src", Enabled: []string{}}
+	scopedItem := Item{Source: "src", Enabled: []string{"work"}}
+
+	b1, _ := yaml.Marshal(nilItem)
+	b2, _ := yaml.Marshal(emptyItem)
+	b3, _ := yaml.Marshal(scopedItem)
+
+	if strings.Contains(string(b1), "enabled") {
+		t.Errorf("nil Enabled should omit field, got: %s", b1)
+	}
+	if !strings.Contains(string(b2), "enabled: []") {
+		t.Errorf("empty Enabled should write 'enabled: []', got: %s", b2)
+	}
+	if !strings.Contains(string(b3), "enabled:") {
+		t.Errorf("scoped Enabled should be present, got: %s", b3)
+	}
+
+	// Round-trip: nil stays nil, empty stays empty.
+	var r1, r2, r3 Item
+	yaml.Unmarshal(b1, &r1)
+	yaml.Unmarshal(b2, &r2)
+	yaml.Unmarshal(b3, &r3)
+
+	if r1.Enabled != nil {
+		t.Errorf("nil Enabled round-trip: got %v, want nil", r1.Enabled)
+	}
+	if r2.Enabled == nil || len(r2.Enabled) != 0 {
+		t.Errorf("empty Enabled round-trip: got %v, want []", r2.Enabled)
+	}
+	if len(r3.Enabled) != 1 || r3.Enabled[0] != "work" {
+		t.Errorf("scoped Enabled round-trip: got %v, want [work]", r3.Enabled)
+	}
+}
+
+func TestYAML_ScopeSetEnabledNilVsEmpty(t *testing.T) {
+	nilSet := ScopeSet{Enabled: nil}
+	emptySet := ScopeSet{Enabled: []string{}}
+
+	b1, _ := yaml.Marshal(nilSet)
+	b2, _ := yaml.Marshal(emptySet)
+
+	if strings.Contains(string(b1), "enabled") {
+		t.Errorf("nil Enabled should omit field, got: %s", b1)
+	}
+	if !strings.Contains(string(b2), "enabled: []") {
+		t.Errorf("empty Enabled should write 'enabled: []', got: %s", b2)
+	}
+
+	var r1, r2 ScopeSet
+	yaml.Unmarshal(b1, &r1)
+	yaml.Unmarshal(b2, &r2)
+
+	if r1.Enabled != nil {
+		t.Errorf("nil round-trip: got %v, want nil", r1.Enabled)
+	}
+	if r2.Enabled == nil {
+		t.Errorf("empty round-trip: got nil, want []")
+	}
+}
+
 func TestYAMLOmitEmpty_SourcesPresent(t *testing.T) {
 	cfg := &Config{
 		Scopes:  map[string]Scope{"work": {Path: "/work", SettingsFile: "s.json"}},

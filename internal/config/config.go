@@ -49,14 +49,39 @@ func (s Source) SkillDirs() []string {
 
 // ScopeSet tracks which scopes something is enabled in.
 type ScopeSet struct {
-	Enabled []string `yaml:"enabled"`
+	Enabled []string `yaml:"enabled,omitempty"`
+}
+
+// MarshalYAML preserves the nil vs empty slice distinction for Enabled.
+// nil omits the field (inherit default), empty slice writes "enabled: []" (disabled).
+func (s ScopeSet) MarshalYAML() (interface{}, error) {
+	if s.Enabled != nil && len(s.Enabled) == 0 {
+		return &struct {
+			Enabled []string `yaml:"enabled,flow"`
+		}{s.Enabled}, nil
+	}
+	type plain ScopeSet
+	return (*plain)(&s), nil
 }
 
 // Item references a source and the scopes it is enabled in.
 // Used for both skills and agents.
 type Item struct {
 	Source  string   `yaml:"source"`
-	Enabled []string `yaml:"enabled"`
+	Enabled []string `yaml:"enabled,omitempty"`
+}
+
+// MarshalYAML preserves the nil vs empty slice distinction for Enabled.
+// nil omits the field (inherit default_scope), empty slice writes "enabled: []" (disabled).
+func (item Item) MarshalYAML() (interface{}, error) {
+	if item.Enabled != nil && len(item.Enabled) == 0 {
+		return &struct {
+			Source  string   `yaml:"source"`
+			Enabled []string `yaml:"enabled,flow"`
+		}{item.Source, item.Enabled}, nil
+	}
+	type plain Item
+	return (*plain)(&item), nil
 }
 
 // Permissions holds allow and deny rules with scope targeting.
