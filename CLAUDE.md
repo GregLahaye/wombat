@@ -15,9 +15,12 @@ config.yaml ─→ Config (parsed, validated)
                   ├─→ resolve.Items (compute effective scopes per item)
                   │       │
                   │       ▼
-                  ├─→ apply.syncSymlinks (create/remove symlinks in scope dirs)
+                  ├─→ apply.DiscoverAllProjectDirs (find git repos under non-global scopes)
+                  │       │
+                  │       ▼
+                  ├─→ apply.syncSymlinks (create/remove symlinks in scope + project dirs)
                   │
-                  └─→ apply.syncSettings (merge plugins + permissions into JSON settings files)
+                  └─→ apply.syncSettings (merge plugins + permissions into scope + project dirs)
 ```
 
 ### Package dependency graph
@@ -28,7 +31,7 @@ cli/*              → apply, config, resolve, source, tidy
 tui/*              → apply, config, resolve
 apply              → config, resolve, source
 resolve            → config, source (pure logic, no I/O)
-tidy               → config
+tidy               → apply, config
 source             → (no internal deps, shells out to git)
 config             → (no internal deps)
 ```

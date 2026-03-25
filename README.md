@@ -51,7 +51,7 @@ wombat apply
 
 This is the command that makes things happen. It:
 - Downloads any skill/agent repositories you've configured (if not already downloaded)
-- Creates the right links so Claude Code can find everything
+- Creates the right links so Claude Code can find everything — both in your scope directories and in every git project underneath them
 - Updates your Claude Code settings files with the correct permissions and plugins
 
 You'll see a summary of what changed:
@@ -244,6 +244,8 @@ scopes:
 
 Each scope is a Claude Code settings directory. The `settings_file` is which JSON file wombat reads and writes in that directory. `settings.local.json` is used for project-scoped settings; `settings.json` is for broader settings.
 
+When you run `wombat apply`, each non-global scope automatically propagates skills, agents, and settings to every git project found under the scope's parent directory. For example, if your "work" scope is at `~/work/.claude`, wombat will find every git repo under `~/work/` and set up symlinks and settings in each project's `.claude/` directory. This is necessary because Claude Code only reads skills from `~/.claude/` (global) and `<project>/.claude/` (project root) — it doesn't check parent directories in between.
+
 ### Sources
 
 ```yaml
@@ -342,5 +344,7 @@ Run `wombat apply` after `wombat pull` (or just use `wombat pull`, which does bo
 - You can edit `~/wombat/config.yaml` directly with a text editor. Just run `wombat apply` afterward.
 - Use `wombat doctor` periodically (or after something feels off) to catch issues early.
 - The dashboard is the fastest way to toggle items across scopes. The CLI is better for scripting or quick one-off changes.
+- After cloning a new repo into a scope directory, run `wombat apply` to set up skills and settings in it.
+- Wombat-created symlinks will show up in `git status`. Add `.claude/skills/` and `.claude/agents/` to your `.gitignore` if you prefer.
 - Set the `WOMBAT_HOME` environment variable if you want your config somewhere other than `~/wombat`.
 - Set `NO_COLOR` (to any value) if you want plain text output from `wombat doctor` instead of symbols.
