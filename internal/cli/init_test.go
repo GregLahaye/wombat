@@ -2,8 +2,11 @@ package cli
 
 import (
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/GregLahaye/wombat/internal/config"
 )
 
 // appendClaudeIfMissing mirrors the logic in scope add and init.
@@ -31,6 +34,46 @@ func TestAppendClaude_TrailingSlash(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("appendClaudeIfMissing(%q) = %q, want %q", tt.input, got, tt.want)
 		}
+	}
+}
+
+func TestImportItem_MergesScopes(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.EnsureMaps()
+
+	// First import: creates the item with "work" scope.
+	importItem(cfg, "helper", "skill", "my-source", "work")
+	if got := cfg.Skills["helper"].Enabled; len(got) != 1 || got[0] != "work" {
+		t.Fatalf("expected [work], got %v", got)
+	}
+
+	// Second import of same item in different scope: should merge, not skip.
+	importItem(cfg, "helper", "skill", "my-source", "personal")
+	got := cfg.Skills["helper"].Enabled
+	if len(got) != 2 {
+		t.Fatalf("expected 2 scopes after merge, got %v", got)
+	}
+	if !slices.Contains(got, "work") || !slices.Contains(got, "personal") {
+		t.Errorf("expected [work, personal], got %v", got)
+	}
+
+	// Duplicate scope should not be added again.
+	importItem(cfg, "helper", "skill", "my-source", "work")
+	if len(cfg.Skills["helper"].Enabled) != 2 {
+		t.Errorf("expected 2 scopes (no duplicate), got %v", cfg.Skills["helper"].Enabled)
+	}
+}
+
+func TestImportItem_Agent(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.EnsureMaps()
+
+	importItem(cfg, "my-agent", "agent", "my-source", "global")
+	importItem(cfg, "my-agent", "agent", "my-source", "work")
+
+	got := cfg.Agents["my-agent"].Enabled
+	if len(got) != 2 {
+		t.Fatalf("expected 2 scopes for agent, got %v", got)
 	}
 }
 

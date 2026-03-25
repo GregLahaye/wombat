@@ -174,15 +174,7 @@ func runInit() error {
 
 			// Import discovered items into config.
 			for _, s := range links {
-				if s.kind == "skill" {
-					if _, exists := cfg.Skills[s.name]; !exists {
-						cfg.Skills[s.name] = config.Item{Source: srcName, Enabled: []string{s.scope}}
-					}
-				} else {
-					if _, exists := cfg.Agents[s.name]; !exists {
-						cfg.Agents[s.name] = config.Item{Source: srcName, Enabled: []string{s.scope}}
-					}
-				}
+				importItem(cfg, s.name, s.kind, srcName, s.scope)
 			}
 
 			fmt.Printf("  Added source %q (%d items)\n", srcName, len(links))
@@ -329,6 +321,23 @@ func detectSettingsFile(scopePath string) string {
 		}
 	}
 	return "settings.local.json"
+}
+
+// importItem adds or merges a discovered item into the config.
+// If the item already exists with the same source, the scope is merged.
+func importItem(cfg *config.Config, name, kind, srcName, scope string) {
+	items := cfg.Skills
+	if kind == "agent" {
+		items = cfg.Agents
+	}
+	if existing, ok := items[name]; ok {
+		if !slices.Contains(existing.Enabled, scope) {
+			existing.Enabled = append(existing.Enabled, scope)
+			items[name] = existing
+		}
+	} else {
+		items[name] = config.Item{Source: srcName, Enabled: []string{scope}}
+	}
 }
 
 func promptLine(scanner *bufio.Scanner, prompt string) string {
