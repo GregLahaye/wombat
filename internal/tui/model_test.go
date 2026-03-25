@@ -284,6 +284,47 @@ func TestWindowResize(t *testing.T) {
 	}
 }
 
+func testConfigWithSource() *config.Config {
+	cfg := &config.Config{
+		Scopes: map[string]config.Scope{
+			"work":   {Path: "/work/.claude", SettingsFile: "settings.local.json"},
+			"global": {Path: "/global/.claude", SettingsFile: "settings.json"},
+		},
+		Sources: map[string]config.Source{
+			"my-source": {Git: "https://example.com/repo", DefaultScope: []string{"work"}},
+		},
+		Plugins: map[string]config.ScopeSet{
+			"plugin-a": {Enabled: []string{"global"}},
+		},
+		Permissions: config.Permissions{
+			Allow: []config.PermissionRule{
+				{Rule: "Read", Scopes: []string{"work"}},
+			},
+		},
+	}
+	cfg.EnsureMaps()
+	return cfg
+}
+
+func TestDefaultsTab_ToggleWithFilterDoesNotPanic(t *testing.T) {
+	cfg := testConfigWithSource()
+	m := New(cfg)
+
+	// Switch to Skills tab and set a filter.
+	m = pressKey(m, "2")
+	m = pressKey(m, "/")
+	m = pressKey(m, "x") // filter that matches nothing
+	m = pressSpecial(m, tea.KeyEnter)
+
+	// Switch to Defaults tab and toggle a scope.
+	m = pressKey(m, "5")
+	m = pressKey(m, " ") // toggle scope on default_scope
+
+	// Switch back to Skills tab — should not panic despite filter rebuild.
+	m = pressKey(m, "2")
+	_ = m.View() // This would panic with stale filter indices.
+}
+
 func TestRender_DoesNotPanic(t *testing.T) {
 	m := New(testConfig())
 	// Just ensure rendering doesn't panic with various states.

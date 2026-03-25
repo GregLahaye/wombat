@@ -296,9 +296,10 @@ func (m *Model) syncItemToConfig(tab int, item *listItem) {
 		src := m.cfg.Sources[item.Name]
 		src.DefaultScope = scopes
 		m.cfg.Sources[item.Name] = src
-		m.items[tabSkills] = m.buildSourcedItems("skill")
-		m.items[tabAgents] = m.buildSourcedItems("agent")
-		m.clampCursors()
+		// Full rebuild: changing default_scope affects Skills/Agents tabs,
+		// including their filter indices which would otherwise go stale.
+		m.rebuildItems()
+		return
 	}
 
 	m.dirty = !m.cfg.Equal(m.original)
