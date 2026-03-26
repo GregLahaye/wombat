@@ -7,6 +7,9 @@
 # OS files
 .DS_Store
 
+# Superpowers skill artifacts
+docs/superpowers/
+
 # User config and cloned sources
 config.yaml
 sources/
