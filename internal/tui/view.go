@@ -32,15 +32,31 @@ func (m Model) render() string {
 	b.WriteString(m.styles.TabBar.Render(strings.Join(tabs, "  ")))
 	b.WriteString("\n")
 
-	// Status bar (only shown when findings exist).
-	if len(m.findings) > 0 {
+	// Status bar.
+	if m.checkingRemote {
+		if len(m.findings) > 0 {
+			summary := doctor.Summary(m.findings)
+			bar := "! " + summary + " — checking for updates…"
+			style := m.styles.StatusBar
+			if doctor.HasErrors(m.findings) {
+				style = m.styles.StatusBarError
+			}
+			b.WriteString(style.Render(bar))
+		} else {
+			b.WriteString(m.styles.Dimmed.Render("  checking for updates…"))
+		}
+		b.WriteString("\n")
+	} else if len(m.findings) > 0 {
 		summary := doctor.Summary(m.findings)
-		bar := "! " + summary + " — a to apply"
+		hint := m.statusHint()
+		bar := "! " + summary + " — " + hint
 		style := m.styles.StatusBar
 		if doctor.HasErrors(m.findings) {
 			style = m.styles.StatusBarError
 		}
 		b.WriteString(style.Render(bar))
+		b.WriteString("\n")
+	} else {
 		b.WriteString("\n")
 	}
 
@@ -167,6 +183,26 @@ func (m Model) renderItem(item listItem, selected bool) string {
 	}
 
 	return line.String()
+}
+
+// statusHint returns the action hint for the status bar based on finding types.
+func (m Model) statusHint() string {
+	hasLocal, hasRemote := false, false
+	for _, f := range m.findings {
+		if strings.HasSuffix(f.Message, "updates available") {
+			hasRemote = true
+		} else {
+			hasLocal = true
+		}
+	}
+	switch {
+	case hasLocal && hasRemote:
+		return "p to pull"
+	case hasRemote:
+		return "p to pull"
+	default:
+		return "a to apply"
+	}
 }
 
 func padRight(s string, width int) string {

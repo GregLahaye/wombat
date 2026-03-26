@@ -1,12 +1,20 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
+
 	"github.com/GregLahaye/wombat/internal/apply"
 	"github.com/GregLahaye/wombat/internal/config"
 	"github.com/GregLahaye/wombat/internal/doctor"
 	"github.com/GregLahaye/wombat/internal/source"
 	tea "github.com/charmbracelet/bubbletea"
 )
+
+// remoteCheckMsg carries findings from async remote update checks.
+type remoteCheckMsg struct {
+	findings []doctor.Finding
+}
 
 const (
 	tabPlugins     = 0
@@ -54,9 +62,10 @@ type Model struct {
 	height       int
 	viewOffset   [numTabs]int
 	collapsed    map[string]bool
-	discovered   map[string][]source.Discovered // cached per source
-	findings     []doctor.Finding              // health check results from startup
-	styles       styles
+	discovered      map[string][]source.Discovered // cached per source
+	findings        []doctor.Finding              // health check results from startup
+	checkingRemote  bool                          // true while remote update check is in flight
+	styles          styles
 }
 
 // New creates a TUI model from a config.
@@ -71,6 +80,7 @@ func New(cfg *config.Config) Model {
 	m.scopeNames = cfg.ScopeNames()
 	m.discovered = apply.DiscoverAll(cfg)
 	m.findings = doctor.Check(cfg, m.discovered)
+	m.checkingRemote = true
 
 	// Collapse sources without default_scope.
 	for name, src := range cfg.Sources {
@@ -97,10 +107,7 @@ func New(cfg *config.Config) Model {
 
 // viewHeight returns the number of item rows visible in the viewport.
 func (m Model) viewHeight() int {
-	h := m.height - 8 // title + tabs + scope headers + footer + borders
-	if len(m.findings) > 0 {
-		h-- // status bar
-	}
+	h := m.height - 9 // title + tabs + status bar + scope headers + footer + borders
 	if h < 1 {
 		return 20
 	}
@@ -111,10 +118,14 @@ func (m Model) Config() *config.Config        { return m.cfg }
 func (m Model) OriginalConfig() *config.Config { return m.original }
 func (m Model) ShouldApply() bool              { return m.shouldApply }
 func (m Model) ShouldUpdate() bool             { return m.shouldUpdate }
-func (m Model) Init() tea.Cmd                  { return nil }
+func (m Model) Init() tea.Cmd                  { return m.checkRemoteUpdates() }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case remoteCheckMsg:
+		m.checkingRemote = false
+		m.findings = append(m.findings, msg.findings...)
+		return m, nil
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
@@ -133,4 +144,42 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) View() string {
 	return m.render()
+}
+
+// checkRemoteUpdates returns a tea.Cmd that checks all sources for remote
+// updates in the background. Results arrive as a remoteCheckMsg.
+func (m Model) checkRemoteUpdates() tea.Cmd {
+	sourcesDir := config.SourcesDir()
+	type srcEntry struct {
+		name string
+		dir  string
+	}
+	var sources []srcEntry
+	for _, name := range m.cfg.SortedSourceNames() {
+		dir := filepath.Join(sourcesDir, name)
+		if _, err := os.Stat(dir); err == nil {
+			sources = append(sources, srcEntry{name, dir})
+		}
+	}
+	if len(sources) == 0 {
+		return nil
+	}
+	return func() tea.Msg {
+		var findings []doctor.Finding
+		for _, src := range sources {
+			hasUpdates, err := source.HasUpdates(src.dir)
+			if err != nil {
+				findings = append(findings, doctor.Finding{
+					Severity: doctor.SevWarning,
+					Message:  "source " + src.name + ": could not check for updates",
+				})
+			} else if hasUpdates {
+				findings = append(findings, doctor.Finding{
+					Severity: doctor.SevWarning,
+					Message:  "source " + src.name + ": updates available",
+				})
+			}
+		}
+		return remoteCheckMsg{findings}
+	}
 }

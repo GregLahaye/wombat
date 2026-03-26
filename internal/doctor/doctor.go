@@ -190,6 +190,8 @@ func Summary(findings []Finding) string {
 			categories["collisions"]++
 		case strings.HasPrefix(f.Message, "unmanaged symlink:"):
 			categories["unmanaged symlinks"]++
+		case strings.HasSuffix(f.Message, "updates available"):
+			categories["updates available"]++
 		default:
 			categories["other issues"]++
 		}

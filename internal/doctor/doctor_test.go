@@ -155,6 +155,17 @@ func TestSummary_Categories(t *testing.T) {
 	}
 }
 
+func TestSummary_UpdatesAvailable(t *testing.T) {
+	findings := []Finding{
+		{SevWarning, "source foo: updates available"},
+		{SevWarning, "source bar: updates available"},
+	}
+	s := Summary(findings)
+	if !strings.Contains(s, "2 updates available") {
+		t.Errorf("expected '2 updates available' in %q", s)
+	}
+}
+
 func TestHasErrors(t *testing.T) {
 	if HasErrors(nil) {
 		t.Error("nil findings should not have errors")
