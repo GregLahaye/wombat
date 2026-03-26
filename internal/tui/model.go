@@ -162,7 +162,7 @@ func (m Model) checkRemoteUpdates() tea.Cmd {
 		}
 	}
 	if len(sources) == 0 {
-		return nil
+		return func() tea.Msg { return remoteCheckMsg{} }
 	}
 	return func() tea.Msg {
 		var findings []doctor.Finding

@@ -187,22 +187,12 @@ func (m Model) renderItem(item listItem, selected bool) string {
 
 // statusHint returns the action hint for the status bar based on finding types.
 func (m Model) statusHint() string {
-	hasLocal, hasRemote := false, false
 	for _, f := range m.findings {
 		if strings.HasSuffix(f.Message, "updates available") {
-			hasRemote = true
-		} else {
-			hasLocal = true
+			return "p to pull"
 		}
 	}
-	switch {
-	case hasLocal && hasRemote:
-		return "p to pull"
-	case hasRemote:
-		return "p to pull"
-	default:
-		return "a to apply"
-	}
+	return "a to apply"
 }
 
 func padRight(s string, width int) string {

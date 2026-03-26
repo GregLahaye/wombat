@@ -77,7 +77,7 @@ func DoctorCmd() *cobra.Command {
 					if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
 						hasIssue := false
 						for _, f := range findings {
-							if strings.Contains(f.Message, name) {
+							if strings.HasPrefix(f.Message, "source "+name+":") {
 								hasIssue = true
 								break
 							}
