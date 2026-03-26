@@ -3,6 +3,7 @@ package tui
 import (
 	"github.com/GregLahaye/wombat/internal/apply"
 	"github.com/GregLahaye/wombat/internal/config"
+	"github.com/GregLahaye/wombat/internal/doctor"
 	"github.com/GregLahaye/wombat/internal/source"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -54,6 +55,7 @@ type Model struct {
 	viewOffset   [numTabs]int
 	collapsed    map[string]bool
 	discovered   map[string][]source.Discovered // cached per source
+	findings     []doctor.Finding              // health check results from startup
 	styles       styles
 }
 
@@ -68,6 +70,7 @@ func New(cfg *config.Config) Model {
 
 	m.scopeNames = cfg.ScopeNames()
 	m.discovered = apply.DiscoverAll(cfg)
+	m.findings = doctor.Check(cfg, m.discovered)
 
 	// Collapse sources without default_scope.
 	for name, src := range cfg.Sources {
@@ -95,6 +98,9 @@ func New(cfg *config.Config) Model {
 // viewHeight returns the number of item rows visible in the viewport.
 func (m Model) viewHeight() int {
 	h := m.height - 8 // title + tabs + scope headers + footer + borders
+	if len(m.findings) > 0 {
+		h-- // status bar
+	}
 	if h < 1 {
 		return 20
 	}

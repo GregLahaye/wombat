@@ -24,8 +24,10 @@ type styles struct {
 	Dirty        lipgloss.Style
 	FilterPrompt lipgloss.Style
 	FilterText   lipgloss.Style
-	SectionAllow lipgloss.Style
-	SectionDeny  lipgloss.Style
+	SectionAllow   lipgloss.Style
+	SectionDeny    lipgloss.Style
+	StatusBar      lipgloss.Style
+	StatusBarError lipgloss.Style
 }
 
 func newStyles() styles {
@@ -49,8 +51,10 @@ func newStyles() styles {
 		Dirty:        lipgloss.NewStyle().Bold(true),
 		FilterPrompt: lipgloss.NewStyle(),
 		FilterText:   lipgloss.NewStyle(),
-		SectionAllow: lipgloss.NewStyle().Bold(true),
-		SectionDeny:  lipgloss.NewStyle().Bold(true),
+		SectionAllow:   lipgloss.NewStyle().Bold(true),
+		SectionDeny:    lipgloss.NewStyle().Bold(true),
+		StatusBar:      lipgloss.NewStyle().Padding(0, 1),
+		StatusBarError: lipgloss.NewStyle().Padding(0, 1),
 	}
 
 	if !nc {
@@ -75,6 +79,8 @@ func newStyles() styles {
 		s.FilterPrompt = s.FilterPrompt.Foreground(highlight)
 		s.SectionAllow = s.SectionAllow.Foreground(green)
 		s.SectionDeny = s.SectionDeny.Foreground(red)
+		s.StatusBar = s.StatusBar.Foreground(yellow)
+		s.StatusBarError = s.StatusBarError.Foreground(red)
 	}
 
 	return s

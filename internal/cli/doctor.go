@@ -2,15 +2,13 @@ package cli
 
 import (
 	"fmt"
-	"maps"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/GregLahaye/wombat/internal/apply"
 	"github.com/GregLahaye/wombat/internal/config"
-	"github.com/GregLahaye/wombat/internal/resolve"
+	"github.com/GregLahaye/wombat/internal/doctor"
 	"github.com/GregLahaye/wombat/internal/source"
 	"github.com/spf13/cobra"
 )
@@ -60,39 +58,50 @@ func DoctorCmd() *cobra.Command {
 				}
 			}
 
-			sourcesDir := config.SourcesDir()
+			// Run shared local checks.
+			findings := doctor.Check(cfg, nil)
+			for _, f := range findings {
+				switch f.Severity {
+				case doctor.SevError:
+					report("error", f.Message)
+				case doctor.SevWarning:
+					report("warning", f.Message)
+				}
+			}
 
-			// Check sources exist and paths are valid.
-			for _, name := range cfg.SortedSourceNames() {
-				src := cfg.Sources[name]
-				dir := filepath.Join(sourcesDir, name)
-				if _, err := os.Stat(dir); os.IsNotExist(err) {
-					report("error", fmt.Sprintf("source %q: directory missing (run wombat apply)", name))
-					continue
+			// Verbose: report healthy sources and discovered projects.
+			if verbose {
+				sourcesDir := config.SourcesDir()
+				for _, name := range cfg.SortedSourceNames() {
+					dir := filepath.Join(sourcesDir, name)
+					if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+						hasIssue := false
+						for _, f := range findings {
+							if strings.Contains(f.Message, name) {
+								hasIssue = true
+								break
+							}
+						}
+						if !hasIssue {
+							report("info", fmt.Sprintf("source %q: ok", name))
+						}
+					}
 				}
-				if _, err := os.Stat(filepath.Join(dir, ".git")); os.IsNotExist(err) {
-					report("error", fmt.Sprintf("source %q: not a git repository", name))
-					continue
-				}
-				report("info", fmt.Sprintf("source %q: ok", name))
-				// Check configured paths exist within the source repo.
-				for _, sp := range src.SkillPaths {
-					if sp == "" {
+
+				projDirs := apply.DiscoverAllProjectDirs(cfg)
+				for _, scopeName := range cfg.ScopeNames() {
+					if scopeName == "global" {
 						continue
 					}
-					if _, err := os.Stat(filepath.Join(dir, sp)); os.IsNotExist(err) {
-						report("warning", fmt.Sprintf("source %q: skill_path %q does not exist", name, sp))
-					}
-				}
-				if src.AgentPath != "" {
-					if _, err := os.Stat(filepath.Join(dir, src.AgentPath)); os.IsNotExist(err) {
-						report("warning", fmt.Sprintf("source %q: agent_path %q does not exist", name, src.AgentPath))
+					if dirs := projDirs[scopeName]; len(dirs) > 0 {
+						report("info", fmt.Sprintf("scope %q: %d project(s) discovered", scopeName, len(dirs)))
 					}
 				}
 			}
 
-			// Check for remote updates (requires network, skip with --offline).
+			// Remote update checks (CLI-only, requires network).
 			if !offline {
+				sourcesDir := config.SourcesDir()
 				for _, name := range cfg.SortedSourceNames() {
 					dir := filepath.Join(sourcesDir, name)
 					if _, err := os.Stat(dir); err != nil {
@@ -105,142 +114,6 @@ func DoctorCmd() *cobra.Command {
 						report("warning", fmt.Sprintf("source %q: updates available (run wombat pull)", name))
 					}
 				}
-			}
-
-			// Discover all items (once — reused for collision check and symlink check).
-			discovered := apply.DiscoverAll(cfg)
-			projDirs := apply.DiscoverAllProjectDirs(cfg)
-
-			// Report discovered projects in verbose mode.
-			for _, scopeName := range cfg.ScopeNames() {
-				if scopeName == "global" {
-					continue
-				}
-				if dirs := projDirs[scopeName]; len(dirs) > 0 {
-					report("info", fmt.Sprintf("scope %q: %d project(s) discovered", scopeName, len(dirs)))
-				}
-			}
-
-			// Check for name collisions across sources (same kind only).
-			nameSource := make(map[string]string) // "kind\x00name" -> first source
-			for _, srcName := range cfg.SortedSourceNames() {
-				for _, item := range discovered[srcName] {
-					key := item.Kind + "\x00" + item.Name
-					if first, exists := nameSource[key]; exists {
-						report("warning", fmt.Sprintf("%s %q found in both %s and %s (using %s)", item.Kind, item.Name, first, srcName, first))
-					} else {
-						nameSource[key] = srcName
-					}
-				}
-			}
-
-			// Check symlinks.
-			skills, agents := resolve.Items(cfg, discovered, false)
-			desired := make(map[string]bool)
-			addDesired := func(items []resolve.ResolvedItem, subdir string) {
-				for _, item := range items {
-					// Skip items with no SourcePath (manually configured but not
-					// discovered). syncSymlinks also skips these — no symlink exists.
-					if item.SourcePath == "" {
-						continue
-					}
-					scopes := item.Scopes
-					if slices.Contains(scopes, "global") {
-						scopes = []string{"global"}
-					}
-					for _, scopeName := range scopes {
-						scope := cfg.Scopes[scopeName]
-						link := filepath.Join(scope.Path, subdir, item.LinkName())
-						desired[link] = true
-						for _, projDir := range projDirs[scopeName] {
-							link := filepath.Join(projDir, subdir, item.LinkName())
-							desired[link] = true
-						}
-					}
-				}
-			}
-			addDesired(skills, "skills")
-			addDesired(agents, "agents")
-
-			for _, link := range slices.Sorted(maps.Keys(desired)) {
-				if _, err := os.Lstat(link); os.IsNotExist(err) {
-					report("error", fmt.Sprintf("missing symlink: %s", link))
-				} else if _, err := os.Stat(link); os.IsNotExist(err) {
-					report("error", fmt.Sprintf("dangling symlink: %s", link))
-				} else {
-					report("info", fmt.Sprintf("symlink ok: %s", link))
-				}
-			}
-
-			// Check for unmanaged symlinks.
-			sourcesPrefix := filepath.Clean(sourcesDir) + string(filepath.Separator)
-			for _, scopeName := range cfg.ScopeNames() {
-				scope := cfg.Scopes[scopeName]
-				for _, subdir := range []string{"skills", "agents"} {
-					dir := filepath.Join(scope.Path, subdir)
-					entries, err := os.ReadDir(dir)
-					if err != nil {
-						continue
-					}
-					for _, entry := range entries {
-						link := filepath.Join(dir, entry.Name())
-						target, err := os.Readlink(link)
-						if err != nil {
-							continue
-						}
-						// Resolve relative targets for comparison.
-						if !filepath.IsAbs(target) {
-							target = filepath.Join(dir, target)
-						}
-						target = filepath.Clean(target)
-						if !strings.HasPrefix(target, sourcesPrefix) {
-							continue
-						}
-						if !desired[link] {
-							report("warning", fmt.Sprintf("unmanaged symlink: %s -> %s", link, target))
-						}
-					}
-				}
-			}
-
-			// Check for unmanaged symlinks in project dirs.
-			for scopeName := range cfg.Scopes {
-				if scopeName == "global" {
-					continue
-				}
-				for _, projDir := range projDirs[scopeName] {
-					for _, subdir := range []string{"skills", "agents"} {
-						dir := filepath.Join(projDir, subdir)
-						entries, err := os.ReadDir(dir)
-						if err != nil {
-							continue
-						}
-						for _, entry := range entries {
-							link := filepath.Join(dir, entry.Name())
-							target, err := os.Readlink(link)
-							if err != nil {
-								continue
-							}
-							if !filepath.IsAbs(target) {
-								target = filepath.Join(dir, target)
-							}
-							target = filepath.Clean(target)
-							if !strings.HasPrefix(target, sourcesPrefix) {
-								continue
-							}
-							if !desired[link] {
-								report("warning", fmt.Sprintf("unmanaged symlink: %s -> %s", link, target))
-							}
-						}
-					}
-				}
-			}
-
-			// Check settings drift.
-			drifted, _ := apply.CheckSettings(cfg, projDirs)
-			slices.Sort(drifted)
-			for _, name := range drifted {
-				report("warning", fmt.Sprintf("scope %q: settings drift (run wombat apply)", name))
 			}
 
 			if errors > 0 {

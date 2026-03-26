@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/GregLahaye/wombat/internal/doctor"
 	"github.com/mattn/go-runewidth"
 )
 
@@ -30,6 +31,18 @@ func (m Model) render() string {
 	}
 	b.WriteString(m.styles.TabBar.Render(strings.Join(tabs, "  ")))
 	b.WriteString("\n")
+
+	// Status bar (only shown when findings exist).
+	if len(m.findings) > 0 {
+		summary := doctor.Summary(m.findings)
+		bar := "! " + summary + " — a to apply"
+		style := m.styles.StatusBar
+		if doctor.HasErrors(m.findings) {
+			style = m.styles.StatusBarError
+		}
+		b.WriteString(style.Render(bar))
+		b.WriteString("\n")
+	}
 
 	// Scope headers.
 	var headers []string
