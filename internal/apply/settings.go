@@ -88,10 +88,16 @@ func syncSettings(cfg, prevCfg *config.Config, r *Result, projDirs map[string][]
 	return nil
 }
 
-// CheckSettings does a dry-run merge and returns scope names with drift.
+// SettingsDrift describes what drifted in a scope's settings.
+type SettingsDrift struct {
+	Scope   string
+	Details []string
+}
+
+// CheckSettings does a dry-run merge and returns drift details per scope.
 // projDirs maps scope names to project .claude directories for drift checking.
-func CheckSettings(cfg *config.Config, projDirs map[string][]string) ([]string, error) {
-	var drifted []string
+func CheckSettings(cfg *config.Config, projDirs map[string][]string) ([]SettingsDrift, error) {
+	var drifts []SettingsDrift
 	for _, scopeName := range cfg.ScopeNames() {
 		scope := cfg.Scopes[scopeName]
 
@@ -105,8 +111,10 @@ func CheckSettings(cfg *config.Config, projDirs map[string][]string) ([]string, 
 		if clone == nil {
 			clone = make(map[string]any)
 		}
-		if mergePlugins(clone, cfg, nil, scopeName) || mergePermissions(clone, cfg, nil, scopeName) {
-			drifted = append(drifted, scopeName)
+		details := diffPlugins(clone, cfg, scopeName)
+		details = append(details, diffPermissions(clone, cfg, scopeName)...)
+		if len(details) > 0 {
+			drifts = append(drifts, SettingsDrift{Scope: scopeName, Details: details})
 			continue
 		}
 
@@ -121,13 +129,85 @@ func CheckSettings(cfg *config.Config, projDirs map[string][]string) ([]string, 
 			if projClone == nil {
 				projClone = make(map[string]any)
 			}
-			if mergePlugins(projClone, cfg, nil, scopeName) || mergePermissions(projClone, cfg, nil, scopeName) {
-				drifted = append(drifted, scopeName)
+			pd := diffPlugins(projClone, cfg, scopeName)
+			pd = append(pd, diffPermissions(projClone, cfg, scopeName)...)
+			if len(pd) > 0 {
+				drifts = append(drifts, SettingsDrift{Scope: scopeName, Details: pd})
 				break
 			}
 		}
 	}
-	return drifted, nil
+	return drifts, nil
+}
+
+// diffPlugins returns human-readable descriptions of plugin drift.
+func diffPlugins(data map[string]any, cfg *config.Config, scope string) []string {
+	plugins, _ := data["enabledPlugins"].(map[string]any)
+	if plugins == nil {
+		plugins = make(map[string]any)
+	}
+
+	var details []string
+	for name, plugin := range cfg.Plugins {
+		scopes := plugin.Enabled
+		if ov, ok := cfg.Overrides[name]; ok {
+			scopes = ov.Enabled
+		}
+		want := slices.Contains(scopes, scope)
+		current, _ := plugins[name].(bool)
+		if want && !current {
+			details = append(details, fmt.Sprintf("plugin %q should be enabled", name))
+		} else if !want && current {
+			details = append(details, fmt.Sprintf("plugin %q should not be enabled", name))
+		}
+	}
+	slices.Sort(details)
+	return details
+}
+
+// diffPermissions returns human-readable descriptions of permission drift.
+func diffPermissions(data map[string]any, cfg *config.Config, scope string) []string {
+	perms, _ := data["permissions"].(map[string]any)
+	if perms == nil {
+		perms = make(map[string]any)
+	}
+
+	var details []string
+	details = append(details, diffRuleList(perms, "allow", cfg.Permissions.Allow, scope)...)
+	details = append(details, diffRuleList(perms, "deny", cfg.Permissions.Deny, scope)...)
+	return details
+}
+
+// diffRuleList returns human-readable descriptions of drift in a single rule list.
+func diffRuleList(perms map[string]any, key string, rules []config.PermissionRule, scope string) []string {
+	owned := make(map[string]bool)
+	desired := make(map[string]bool)
+	for _, r := range rules {
+		owned[r.Rule] = true
+		if slices.Contains(r.Scopes, scope) {
+			desired[r.Rule] = true
+		}
+	}
+
+	existingSlice := ExtractStringSlice(perms, key)
+	existing := make(map[string]bool)
+	for _, r := range existingSlice {
+		existing[r] = true
+	}
+
+	var details []string
+	for rule := range desired {
+		if !existing[rule] {
+			details = append(details, fmt.Sprintf("%s %q should be present", key, rule))
+		}
+	}
+	for _, r := range existingSlice {
+		if owned[r] && !desired[r] {
+			details = append(details, fmt.Sprintf("%s %q should not be present", key, r))
+		}
+	}
+	slices.Sort(details)
+	return details
 }
 
 // mergePlugins applies partial-ownership merge for enabledPlugins.

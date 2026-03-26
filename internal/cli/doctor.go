@@ -31,7 +31,11 @@ func DoctorCmd() *cobra.Command {
 			noColor := os.Getenv("NO_COLOR") != ""
 			errors, warnings := 0, 0
 
-			report := func(level, msg string) {
+			report := func(level string, f *doctor.Finding) {
+				msg := ""
+				if f != nil {
+					msg = f.Message
+				}
 				switch level {
 				case "error":
 					errors++
@@ -55,6 +59,23 @@ func DoctorCmd() *cobra.Command {
 							fmt.Printf("✓ %s\n", msg)
 						}
 					}
+					return
+				}
+				if f != nil {
+					for _, detail := range f.Details {
+						if noColor {
+							fmt.Printf("        - %s\n", detail)
+						} else {
+							fmt.Printf("  - %s\n", detail)
+						}
+					}
+					if f.Hint != "" {
+						if noColor {
+							fmt.Printf("        → %s\n", f.Hint)
+						} else {
+							fmt.Printf("  → %s\n", f.Hint)
+						}
+					}
 				}
 			}
 
@@ -63,9 +84,9 @@ func DoctorCmd() *cobra.Command {
 			for _, f := range findings {
 				switch f.Severity {
 				case doctor.SevError:
-					report("error", f.Message)
+					report("error", &f)
 				case doctor.SevWarning:
-					report("warning", f.Message)
+					report("warning", &f)
 				}
 			}
 
@@ -83,7 +104,7 @@ func DoctorCmd() *cobra.Command {
 							}
 						}
 						if !hasIssue {
-							report("info", fmt.Sprintf("source %q: ok", name))
+							report("info", &doctor.Finding{Message: fmt.Sprintf("source %q: ok", name)})
 						}
 					}
 				}
@@ -94,7 +115,7 @@ func DoctorCmd() *cobra.Command {
 						continue
 					}
 					if dirs := projDirs[scopeName]; len(dirs) > 0 {
-						report("info", fmt.Sprintf("scope %q: %d project(s) discovered", scopeName, len(dirs)))
+						report("info", &doctor.Finding{Message: fmt.Sprintf("scope %q: %d project(s) discovered", scopeName, len(dirs))})
 					}
 				}
 			}
@@ -109,9 +130,9 @@ func DoctorCmd() *cobra.Command {
 					}
 					hasUpdates, err := source.HasUpdates(dir)
 					if err != nil {
-						report("warning", fmt.Sprintf("source %q: could not check for updates: %v", name, err))
+						report("warning", &doctor.Finding{Message: fmt.Sprintf("source %q: could not check for updates: %v", name, err)})
 					} else if hasUpdates {
-						report("warning", fmt.Sprintf("source %q: updates available (run wombat pull)", name))
+						report("warning", &doctor.Finding{Message: fmt.Sprintf("source %q: updates available", name), Hint: "run wombat pull"})
 					}
 				}
 			}

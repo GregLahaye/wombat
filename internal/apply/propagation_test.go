@@ -193,11 +193,11 @@ func TestCheckSettings_IncludesProjectDirs(t *testing.T) {
 		"work": {filepath.Join(projDir, ".claude")},
 	}
 
-	drifted, err := CheckSettings(cfg, projDirs)
+	drifts, err := CheckSettings(cfg, projDirs)
 	if err != nil {
 		t.Fatalf("CheckSettings: %v", err)
 	}
-	if len(drifted) == 0 {
+	if len(drifts) == 0 {
 		t.Error("expected drift for missing project settings")
 	}
 }

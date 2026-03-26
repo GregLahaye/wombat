@@ -142,9 +142,9 @@ func TestSummary_Empty(t *testing.T) {
 
 func TestSummary_Categories(t *testing.T) {
 	findings := []Finding{
-		{SevError, "missing symlink: /a"},
-		{SevError, "missing symlink: /b"},
-		{SevWarning, "scope work: settings drift"},
+		{Severity: SevError, Message: "missing symlink: /a"},
+		{Severity: SevError, Message: "missing symlink: /b"},
+		{Severity: SevWarning, Message: "scope work: settings drift"},
 	}
 	s := Summary(findings)
 	if !strings.Contains(s, "2 missing symlinks") {
@@ -157,8 +157,8 @@ func TestSummary_Categories(t *testing.T) {
 
 func TestSummary_UpdatesAvailable(t *testing.T) {
 	findings := []Finding{
-		{SevWarning, "source foo: updates available"},
-		{SevWarning, "source bar: updates available"},
+		{Severity: SevWarning, Message: "source foo: updates available"},
+		{Severity: SevWarning, Message: "source bar: updates available"},
 	}
 	s := Summary(findings)
 	if !strings.Contains(s, "2 updates available") {
@@ -170,10 +170,10 @@ func TestHasErrors(t *testing.T) {
 	if HasErrors(nil) {
 		t.Error("nil findings should not have errors")
 	}
-	if HasErrors([]Finding{{SevWarning, "warn"}}) {
+	if HasErrors([]Finding{{Severity: SevWarning, Message: "warn"}}) {
 		t.Error("warnings-only should not have errors")
 	}
-	if !HasErrors([]Finding{{SevError, "err"}}) {
+	if !HasErrors([]Finding{{Severity: SevError, Message: "err"}}) {
 		t.Error("error finding should have errors")
 	}
 }

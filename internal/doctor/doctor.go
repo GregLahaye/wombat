@@ -27,6 +27,8 @@ const (
 type Finding struct {
 	Severity Severity
 	Message  string
+	Details  []string // Optional sub-items explaining the finding.
+	Hint     string   // Suggested fix, e.g. "run wombat apply".
 }
 
 // Check runs all local health checks and returns findings.
@@ -45,11 +47,11 @@ func Check(cfg *config.Config, discovered map[string][]source.Discovered) []Find
 		src := cfg.Sources[name]
 		dir := filepath.Join(sourcesDir, name)
 		if _, err := os.Stat(dir); os.IsNotExist(err) {
-			findings = append(findings, Finding{SevError, "source " + name + ": directory missing"})
+			findings = append(findings, Finding{Severity: SevError, Message: "source " + name + ": directory missing", Hint: "run wombat apply"})
 			continue
 		}
 		if _, err := os.Stat(filepath.Join(dir, ".git")); os.IsNotExist(err) {
-			findings = append(findings, Finding{SevError, "source " + name + ": not a git repository"})
+			findings = append(findings, Finding{Severity: SevError, Message: "source " + name + ": not a git repository", Hint: "run wombat apply"})
 			continue
 		}
 		for _, sp := range src.SkillPaths {
@@ -57,12 +59,12 @@ func Check(cfg *config.Config, discovered map[string][]source.Discovered) []Find
 				continue
 			}
 			if _, err := os.Stat(filepath.Join(dir, sp)); os.IsNotExist(err) {
-				findings = append(findings, Finding{SevWarning, "source " + name + ": skill_path " + sp + " does not exist"})
+				findings = append(findings, Finding{Severity: SevWarning, Message: "source " + name + ": skill_path " + sp + " does not exist", Hint: "check config.yaml"})
 			}
 		}
 		if src.AgentPath != "" {
 			if _, err := os.Stat(filepath.Join(dir, src.AgentPath)); os.IsNotExist(err) {
-				findings = append(findings, Finding{SevWarning, "source " + name + ": agent_path " + src.AgentPath + " does not exist"})
+				findings = append(findings, Finding{Severity: SevWarning, Message: "source " + name + ": agent_path " + src.AgentPath + " does not exist", Hint: "check config.yaml"})
 			}
 		}
 	}
@@ -73,7 +75,7 @@ func Check(cfg *config.Config, discovered map[string][]source.Discovered) []Find
 		for _, item := range discovered[srcName] {
 			key := item.Kind + "\x00" + item.Name
 			if first, exists := nameSource[key]; exists {
-				findings = append(findings, Finding{SevWarning, item.Kind + " " + item.Name + ": collision between " + first + " and " + srcName})
+				findings = append(findings, Finding{Severity: SevWarning, Message: item.Kind + " " + item.Name + ": collision between " + first + " and " + srcName, Hint: "rename or remove one"})
 			} else {
 				nameSource[key] = srcName
 			}
@@ -109,9 +111,9 @@ func Check(cfg *config.Config, discovered map[string][]source.Discovered) []Find
 
 	for _, link := range slices.Sorted(maps.Keys(desired)) {
 		if _, err := os.Lstat(link); os.IsNotExist(err) {
-			findings = append(findings, Finding{SevError, "missing symlink: " + link})
+			findings = append(findings, Finding{Severity: SevError, Message: "missing symlink: " + link, Hint: "run wombat apply"})
 		} else if _, err := os.Stat(link); os.IsNotExist(err) {
-			findings = append(findings, Finding{SevError, "dangling symlink: " + link})
+			findings = append(findings, Finding{Severity: SevError, Message: "dangling symlink: " + link, Hint: "run wombat apply"})
 		}
 	}
 
@@ -136,7 +138,7 @@ func Check(cfg *config.Config, discovered map[string][]source.Discovered) []Find
 				continue
 			}
 			if !desired[link] {
-				findings = append(findings, Finding{SevWarning, "unmanaged symlink: " + link})
+				findings = append(findings, Finding{Severity: SevWarning, Message: "unmanaged symlink: " + link, Hint: "run wombat tidy"})
 			}
 		}
 	}
@@ -159,10 +161,9 @@ func Check(cfg *config.Config, discovered map[string][]source.Discovered) []Find
 	}
 
 	// 5. Check settings drift.
-	drifted, _ := apply.CheckSettings(cfg, projDirs)
-	slices.Sort(drifted)
-	for _, name := range drifted {
-		findings = append(findings, Finding{SevWarning, "scope " + name + ": settings drift"})
+	drifts, _ := apply.CheckSettings(cfg, projDirs)
+	for _, d := range drifts {
+		findings = append(findings, Finding{Severity: SevWarning, Message: "scope " + d.Scope + ": settings drift", Details: d.Details, Hint: "run wombat apply"})
 	}
 
 	return findings
