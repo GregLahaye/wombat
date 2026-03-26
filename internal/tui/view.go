@@ -74,26 +74,30 @@ func (m Model) render() string {
 	b.WriteString(strings.Join(headers, ""))
 	b.WriteString("\n")
 
-	// Items.
-	vis := m.visibleItems()
-	viewHeight := m.viewHeight()
-	start := m.viewOffset[m.activeTab]
-	end := start + viewHeight
-	if end > len(vis) {
-		end = len(vis)
-	}
+	// Items (or dig animation).
+	if m.digPhase != digIdle {
+		m.renderDig(&b)
+	} else {
+		vis := m.visibleItems()
+		viewHeight := m.viewHeight()
+		start := m.viewOffset[m.activeTab]
+		end := start + viewHeight
+		if end > len(vis) {
+			end = len(vis)
+		}
 
-	if len(vis) == 0 {
-		b.WriteString(m.styles.Dimmed.Render("  No items"))
-		b.WriteString("\n")
-	}
-	for viewIdx := start; viewIdx < end; viewIdx++ {
-		idx := vis[viewIdx]
-		item := m.items[m.activeTab][idx]
-		selected := viewIdx == m.cursor[m.activeTab]
+		if len(vis) == 0 {
+			b.WriteString(m.styles.Dimmed.Render("  No items"))
+			b.WriteString("\n")
+		}
+		for viewIdx := start; viewIdx < end; viewIdx++ {
+			idx := vis[viewIdx]
+			item := m.items[m.activeTab][idx]
+			selected := viewIdx == m.cursor[m.activeTab]
 
-		b.WriteString(m.renderItem(item, selected))
-		b.WriteString("\n")
+			b.WriteString(m.renderItem(item, selected))
+			b.WriteString("\n")
+		}
 	}
 
 	if m.filtering {

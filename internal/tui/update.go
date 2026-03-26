@@ -86,6 +86,9 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "d":
 		m.deletePermissionRule()
 
+	case "?":
+		return m, m.startDig()
+
 	case "esc":
 		if m.filterText != "" {
 			m.filterText = ""

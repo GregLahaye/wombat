@@ -28,6 +28,8 @@ type styles struct {
 	SectionDeny    lipgloss.Style
 	StatusBar      lipgloss.Style
 	StatusBarError lipgloss.Style
+	WombatArt      lipgloss.Style
+	WombatFact     lipgloss.Style
 }
 
 func newStyles() styles {
@@ -55,6 +57,8 @@ func newStyles() styles {
 		SectionDeny:    lipgloss.NewStyle().Bold(true),
 		StatusBar:      lipgloss.NewStyle().Padding(0, 1),
 		StatusBarError: lipgloss.NewStyle().Padding(0, 1),
+		WombatArt:      lipgloss.NewStyle(),
+		WombatFact:     lipgloss.NewStyle().Bold(true),
 	}
 
 	if !nc {
@@ -81,6 +85,8 @@ func newStyles() styles {
 		s.SectionDeny = s.SectionDeny.Foreground(red)
 		s.StatusBar = s.StatusBar.Foreground(yellow)
 		s.StatusBarError = s.StatusBarError.Foreground(red)
+		s.WombatArt = s.WombatArt.Foreground(lipgloss.Color("215"))
+		s.WombatFact = s.WombatFact.Foreground(highlight)
 	}
 
 	return s

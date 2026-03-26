@@ -64,8 +64,15 @@ type Model struct {
 	collapsed    map[string]bool
 	discovered      map[string][]source.Discovered // cached per source
 	findings        []doctor.Finding              // health check results from startup
-	checkingRemote  bool                          // true while remote update check is in flight
-	styles          styles
+	checkingRemote bool                          // true while remote update check is in flight
+	digPhase       digPhase                      // easter egg animation state
+	digProgress    int                           // lines cleared/restored or chars revealed
+	digHoldLeft    int                           // ticks remaining in hold phase
+	digFact        string                        // random fact to display
+	digLines       int                           // snapshotted line count for full animation
+	digRevealed    []bool                        // which chars are visible (reveal phase)
+	digRevealOrder []int                         // random order to reveal chars
+	styles         styles
 }
 
 // New creates a TUI model from a config.
@@ -126,11 +133,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.checkingRemote = false
 		m.findings = append(m.findings, msg.findings...)
 		return m, nil
+	case digTickMsg:
+		return m.updateDig()
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
 		return m, nil
 	case tea.KeyMsg:
+		if m.digPhase != digIdle {
+			return m, nil // swallow keys during animation
+		}
 		if m.addingRule {
 			return m.updateAddRule(msg)
 		}
