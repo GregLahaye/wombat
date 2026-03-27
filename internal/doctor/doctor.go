@@ -2,6 +2,7 @@
 package doctor
 
 import (
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
@@ -163,7 +164,38 @@ func Check(cfg *config.Config, discovered map[string][]source.Discovered) []Find
 	// 5. Check settings drift.
 	drifts, _ := apply.CheckSettings(cfg, projDirs)
 	for _, d := range drifts {
-		findings = append(findings, Finding{Severity: SevWarning, Message: "scope " + d.Scope + ": settings drift", Details: d.Details, Hint: "run wombat apply"})
+		findings = append(findings, Finding{Severity: SevWarning, Message: "scope " + d.Scope + ": settings drift", Details: d.Details, Hint: "run wombat tidy, then wombat apply"})
+	}
+
+	// 6. Check for unmanaged scope permissions.
+	for _, scopeName := range cfg.ScopeNames() {
+		scope := cfg.Scopes[scopeName]
+		path := filepath.Join(scope.Path, scope.SettingsFile)
+		data, err := apply.ReadSettings(path)
+		if err != nil {
+			continue
+		}
+		perms, _ := data["permissions"].(map[string]any)
+		if perms == nil {
+			continue
+		}
+		var unmanaged []string
+		for _, kind := range []string{"allow", "deny"} {
+			for _, rule := range apply.ExtractStringSlice(perms, kind) {
+				if !isManagedPermission(cfg, kind, rule, scopeName) {
+					unmanaged = append(unmanaged, fmt.Sprintf("%s %q", kind, rule))
+				}
+			}
+		}
+		slices.Sort(unmanaged)
+		if len(unmanaged) > 0 {
+			findings = append(findings, Finding{
+				Severity: SevWarning,
+				Message:  fmt.Sprintf("scope %s: %d unmanaged permission(s)", scopeName, len(unmanaged)),
+				Details:  unmanaged,
+				Hint:     "run wombat tidy",
+			})
+		}
 	}
 
 	return findings
@@ -189,6 +221,8 @@ func Summary(findings []Finding) string {
 			categories["settings drift"]++
 		case strings.Contains(f.Message, "collision"):
 			categories["collisions"]++
+		case strings.Contains(f.Message, "unmanaged permission"):
+			categories["unmanaged permissions"]++
 		case strings.HasPrefix(f.Message, "unmanaged symlink:"):
 			categories["unmanaged symlinks"]++
 		case strings.HasSuffix(f.Message, "updates available"):
@@ -210,6 +244,22 @@ func Summary(findings []Finding) string {
 func HasErrors(findings []Finding) bool {
 	for _, f := range findings {
 		if f.Severity == SevError {
+			return true
+		}
+	}
+	return false
+}
+
+// isManagedPermission returns true if the rule is in wombat's config for the given scope.
+func isManagedPermission(cfg *config.Config, kind, rule, scopeName string) bool {
+	var rules []config.PermissionRule
+	if kind == "allow" {
+		rules = cfg.Permissions.Allow
+	} else {
+		rules = cfg.Permissions.Deny
+	}
+	for _, r := range rules {
+		if r.Rule == rule && slices.Contains(r.Scopes, scopeName) {
 			return true
 		}
 	}

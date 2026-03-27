@@ -302,6 +302,212 @@ func TestScan_SkipsManagedRulesInGlobalPromotion(t *testing.T) {
 	}
 }
 
+func TestScan_FindsScopePermissions(t *testing.T) {
+	dir := t.TempDir()
+
+	scopePath := filepath.Join(dir, "work", ".claude")
+	os.MkdirAll(scopePath, 0o755)
+
+	// Write permissions directly to scope settings file.
+	if err := apply.WriteSettings(filepath.Join(scopePath, "settings.json"), map[string]any{
+		"permissions": map[string]any{
+			"allow": []any{"mcp__playwright__browser_type", "Read"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &config.Config{
+		Scopes: map[string]config.Scope{
+			"work": {Path: scopePath, SettingsFile: "settings.json"},
+		},
+	}
+	cfg.EnsureMaps()
+
+	result, err := Scan(cfg)
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+
+	if len(result.Recommendations) != 2 {
+		t.Fatalf("expected 2 recommendations, got %d: %v", len(result.Recommendations), result.Recommendations)
+	}
+	for _, rec := range result.Recommendations {
+		if rec.TargetScope != "work" {
+			t.Errorf("expected target scope 'work', got %q", rec.TargetScope)
+		}
+		if rec.Type != "allow" {
+			t.Errorf("expected type 'allow', got %q", rec.Type)
+		}
+	}
+}
+
+func TestScan_SkipsManagedRulesInScopeSettings(t *testing.T) {
+	dir := t.TempDir()
+
+	scopePath := filepath.Join(dir, "work", ".claude")
+	os.MkdirAll(scopePath, 0o755)
+
+	if err := apply.WriteSettings(filepath.Join(scopePath, "settings.json"), map[string]any{
+		"permissions": map[string]any{
+			"allow": []any{"Read", "Write"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &config.Config{
+		Scopes: map[string]config.Scope{
+			"work": {Path: scopePath, SettingsFile: "settings.json"},
+		},
+		Permissions: config.Permissions{
+			Allow: []config.PermissionRule{
+				{Rule: "Read", Scopes: []string{"work"}},
+			},
+		},
+	}
+	cfg.EnsureMaps()
+
+	result, err := Scan(cfg)
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+
+	// Only "Write" should be recommended, "Read" is already managed.
+	if len(result.Recommendations) != 1 {
+		t.Fatalf("expected 1 recommendation, got %d: %v", len(result.Recommendations), result.Recommendations)
+	}
+	if result.Recommendations[0].Rule != "Write" {
+		t.Errorf("expected rule 'Write', got %q", result.Recommendations[0].Rule)
+	}
+}
+
+func TestScan_FindsGlobalScopePermissions(t *testing.T) {
+	dir := t.TempDir()
+
+	globalPath := filepath.Join(dir, ".claude")
+	os.MkdirAll(globalPath, 0o755)
+
+	if err := apply.WriteSettings(filepath.Join(globalPath, "settings.json"), map[string]any{
+		"permissions": map[string]any{
+			"allow": []any{"Bash(git:*)"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &config.Config{
+		Scopes: map[string]config.Scope{
+			"global": {Path: globalPath, SettingsFile: "settings.json"},
+		},
+	}
+	cfg.EnsureMaps()
+
+	result, err := Scan(cfg)
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+
+	if len(result.Recommendations) != 1 {
+		t.Fatalf("expected 1 recommendation, got %d", len(result.Recommendations))
+	}
+	if result.Recommendations[0].TargetScope != "global" {
+		t.Errorf("expected target scope 'global', got %q", result.Recommendations[0].TargetScope)
+	}
+}
+
+func TestScan_DeduplicatesScopeAndProjectRules(t *testing.T) {
+	dir := t.TempDir()
+
+	scopePath := filepath.Join(dir, "work", ".claude")
+	os.MkdirAll(scopePath, 0o755)
+
+	// Same rule in scope settings and a project under the scope.
+	perms := map[string]any{
+		"permissions": map[string]any{
+			"allow": []any{"Read"},
+		},
+	}
+	if err := apply.WriteSettings(filepath.Join(scopePath, "settings.local.json"), perms); err != nil {
+		t.Fatal(err)
+	}
+	writeProjectSettings(t, filepath.Join(dir, "work", "proj-a"), "settings.local.json", perms)
+
+	cfg := &config.Config{
+		Scopes: map[string]config.Scope{
+			"work": {Path: scopePath, SettingsFile: "settings.local.json"},
+		},
+	}
+	cfg.EnsureMaps()
+
+	result, err := Scan(cfg)
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+
+	// Should be one recommendation with both paths in FoundIn.
+	recs := filterRecs(result.Recommendations, "Read", "allow")
+	if len(recs) != 1 {
+		t.Fatalf("expected 1 recommendation for Read, got %d", len(recs))
+	}
+	if len(recs[0].FoundIn) != 2 {
+		t.Errorf("expected 2 FoundIn paths, got %d: %v", len(recs[0].FoundIn), recs[0].FoundIn)
+	}
+}
+
+func filterRecs(recs []Recommendation, rule, kind string) []Recommendation {
+	var out []Recommendation
+	for _, r := range recs {
+		if r.Rule == rule && r.Type == kind {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+func TestApplyRecommendations_RemovesFromScopeSettings(t *testing.T) {
+	dir := t.TempDir()
+
+	scopePath := filepath.Join(dir, "work", ".claude")
+	os.MkdirAll(scopePath, 0o755)
+	settingsPath := filepath.Join(scopePath, "settings.json")
+
+	if err := apply.WriteSettings(settingsPath, map[string]any{
+		"permissions": map[string]any{
+			"allow": []any{"Read", "Write"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &config.Config{}
+	cfg.EnsureMaps()
+
+	recs := []Recommendation{{
+		Rule:        "Read",
+		Type:        "allow",
+		FoundIn:     []string{settingsPath},
+		TargetScope: "work",
+	}}
+
+	if err := ApplyRecommendations(cfg, recs); err != nil {
+		t.Fatalf("ApplyRecommendations: %v", err)
+	}
+
+	// "Read" should be in config.
+	if len(cfg.Permissions.Allow) != 1 || cfg.Permissions.Allow[0].Rule != "Read" {
+		t.Errorf("expected Read in config, got %v", cfg.Permissions.Allow)
+	}
+
+	// "Write" should remain in settings file, "Read" removed.
+	data, _ := apply.ReadSettings(settingsPath)
+	perms, _ := data["permissions"].(map[string]any)
+	remaining := apply.ExtractStringSlice(perms, "allow")
+	if len(remaining) != 1 || remaining[0] != "Write" {
+		t.Errorf("expected [Write] remaining, got %v", remaining)
+	}
+}
+
 func TestApplyRecommendations_RemovesEmptyPermissions(t *testing.T) {
 	root := t.TempDir()
 	projDir := filepath.Join(root, "project")

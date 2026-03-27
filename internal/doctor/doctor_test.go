@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/GregLahaye/wombat/internal/apply"
 	"github.com/GregLahaye/wombat/internal/config"
 	"github.com/GregLahaye/wombat/internal/source"
 )
@@ -131,6 +132,79 @@ func TestCheck_NameCollision(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("expected collision warning, got: %v", findings)
+	}
+}
+
+func TestCheck_UnmanagedScopePermissions(t *testing.T) {
+	root, cfg, discovered := setupTestEnv(t)
+
+	// Create symlinks so other checks pass.
+	workScope := cfg.Scopes["work"]
+	srcDir := filepath.Join(root, "sources", "test-source")
+	for _, sub := range []struct{ dir, link, target string }{
+		{filepath.Join(workScope.Path, "skills"), "my-skill", filepath.Join(srcDir, "my-skill")},
+		{filepath.Join(workScope.Path, "agents"), "my-agent.md", filepath.Join(srcDir, "my-agent.md")},
+	} {
+		os.MkdirAll(sub.dir, 0o755)
+		os.Symlink(sub.target, filepath.Join(sub.dir, sub.link))
+	}
+
+	// Add unmanaged permission to work scope settings.
+	settingsPath := filepath.Join(workScope.Path, workScope.SettingsFile)
+	apply.WriteSettings(settingsPath, map[string]any{
+		"permissions": map[string]any{
+			"allow": []any{"mcp__playwright__browser_type"},
+		},
+	})
+
+	findings := Check(cfg, discovered)
+	found := false
+	for _, f := range findings {
+		if f.Severity == SevWarning && strings.Contains(f.Message, "unmanaged permission") {
+			found = true
+			if len(f.Details) != 1 {
+				t.Errorf("expected 1 detail, got %d", len(f.Details))
+			}
+			if f.Hint != "run wombat tidy" {
+				t.Errorf("expected hint 'run wombat tidy', got %q", f.Hint)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("expected unmanaged permissions finding, got: %v", findings)
+	}
+}
+
+func TestCheck_ManagedPermissionsNotFlaggedAsUnmanaged(t *testing.T) {
+	root, cfg, discovered := setupTestEnv(t)
+
+	// Create symlinks so other checks pass.
+	workScope := cfg.Scopes["work"]
+	srcDir := filepath.Join(root, "sources", "test-source")
+	for _, sub := range []struct{ dir, link, target string }{
+		{filepath.Join(workScope.Path, "skills"), "my-skill", filepath.Join(srcDir, "my-skill")},
+		{filepath.Join(workScope.Path, "agents"), "my-agent.md", filepath.Join(srcDir, "my-agent.md")},
+	} {
+		os.MkdirAll(sub.dir, 0o755)
+		os.Symlink(sub.target, filepath.Join(sub.dir, sub.link))
+	}
+
+	// Add a managed permission to work scope settings.
+	cfg.Permissions.Allow = []config.PermissionRule{
+		{Rule: "Read", Scopes: []string{"work"}},
+	}
+	settingsPath := filepath.Join(workScope.Path, workScope.SettingsFile)
+	apply.WriteSettings(settingsPath, map[string]any{
+		"permissions": map[string]any{
+			"allow": []any{"Read"},
+		},
+	})
+
+	findings := Check(cfg, discovered)
+	for _, f := range findings {
+		if strings.Contains(f.Message, "unmanaged permission") {
+			t.Errorf("managed permission should not be flagged as unmanaged: %v", f)
+		}
 	}
 }
 

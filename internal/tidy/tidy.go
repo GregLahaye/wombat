@@ -28,10 +28,52 @@ type ScanResult struct {
 	Recommendations []Recommendation
 }
 
-// Scan examines project-level settings files under each non-global scope
-// and returns consolidation recommendations.
+// Scan examines scope-level and project-level settings files and returns
+// recommendations for adopting unmanaged permissions into wombat config.
 func Scan(cfg *config.Config) (*ScanResult, error) {
 	result := &ScanResult{}
+
+	// Build set of rules already managed by wombat per scope.
+	managedRules := make(map[string]map[string]bool)
+	for _, scopeName := range cfg.ScopeNames() {
+		m := make(map[string]bool)
+		for _, r := range cfg.Permissions.Allow {
+			if slices.Contains(r.Scopes, scopeName) {
+				m["allow\x00"+r.Rule] = true
+			}
+		}
+		for _, r := range cfg.Permissions.Deny {
+			if slices.Contains(r.Scopes, scopeName) {
+				m["deny\x00"+r.Rule] = true
+			}
+		}
+		managedRules[scopeName] = m
+	}
+
+	// Step 0: Scope-level settings → adopt into config.
+	for _, scopeName := range cfg.ScopeNames() {
+		scope := cfg.Scopes[scopeName]
+		path := filepath.Join(scope.Path, scope.SettingsFile)
+		data, err := apply.ReadSettings(path)
+		if err != nil || len(data) == 0 {
+			continue
+		}
+		managed := managedRules[scopeName]
+		for _, kind := range []string{"allow", "deny"} {
+			for _, rule := range extractRules(data, kind) {
+				if managed[kind+"\x00"+rule] {
+					continue
+				}
+				result.Recommendations = append(result.Recommendations, Recommendation{
+					Rule:        rule,
+					Type:        kind,
+					FoundIn:     []string{path},
+					TargetScope: scopeName,
+					Reason:      fmt.Sprintf("Found in %s scope settings, not managed by wombat", scopeName),
+				})
+			}
+		}
+	}
 
 	// Collect project permissions per scope.
 	scopeProjects := make(map[string][]projectPerms)
@@ -66,23 +108,6 @@ func Scan(cfg *config.Config) (*ScanResult, error) {
 		}
 	}
 
-	// Build set of rules already managed by wombat per scope.
-	managedRules := make(map[string]map[string]bool)
-	for _, scopeName := range cfg.ScopeNames() {
-		m := make(map[string]bool)
-		for _, r := range cfg.Permissions.Allow {
-			if slices.Contains(r.Scopes, scopeName) {
-				m["allow\x00"+r.Rule] = true
-			}
-		}
-		for _, r := range cfg.Permissions.Deny {
-			if slices.Contains(r.Scopes, scopeName) {
-				m["deny\x00"+r.Rule] = true
-			}
-		}
-		managedRules[scopeName] = m
-	}
-
 	// Step 1: Any project-level permission -> scope level.
 	type ruleKey struct{ rule, kind string }
 	for scopeName, projects := range scopeProjects {
@@ -102,6 +127,23 @@ func Scan(cfg *config.Config) (*ScanResult, error) {
 				})
 			}
 		}
+	}
+
+	// Deduplicate: merge scope + project recommendations for same rule/type/scope.
+	{
+		seen := make(map[string]int) // key → index in deduped
+		var deduped []Recommendation
+		for _, rec := range result.Recommendations {
+			key := rec.Type + "\x00" + rec.Rule + "\x00" + rec.TargetScope
+			if idx, ok := seen[key]; ok {
+				deduped[idx].FoundIn = append(deduped[idx].FoundIn, rec.FoundIn...)
+				deduped[idx].Reason = fmt.Sprintf("Found in %d location(s) under %s", len(deduped[idx].FoundIn), rec.TargetScope)
+			} else {
+				seen[key] = len(deduped)
+				deduped = append(deduped, rec)
+			}
+		}
+		result.Recommendations = deduped
 	}
 
 	// Step 2: Rules in ALL non-global scopes -> promote to global.
