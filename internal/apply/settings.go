@@ -201,11 +201,6 @@ func diffRuleList(perms map[string]any, key string, rules []config.PermissionRul
 			details = append(details, fmt.Sprintf("%s %q should be present", key, rule))
 		}
 	}
-	for _, r := range existingSlice {
-		if owned[r] && !desired[r] {
-			details = append(details, fmt.Sprintf("%s %q not in config for this scope", key, r))
-		}
-	}
 	slices.Sort(details)
 	return details
 }

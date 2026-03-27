@@ -164,7 +164,7 @@ func Check(cfg *config.Config, discovered map[string][]source.Discovered) []Find
 	// 5. Check settings drift.
 	drifts, _ := apply.CheckSettings(cfg, projDirs)
 	for _, d := range drifts {
-		findings = append(findings, Finding{Severity: SevWarning, Message: "scope " + d.Scope + ": settings drift", Details: d.Details, Hint: "run wombat tidy, then wombat apply"})
+		findings = append(findings, Finding{Severity: SevWarning, Message: "scope " + d.Scope + ": settings drift", Details: d.Details, Hint: "run wombat apply"})
 	}
 
 	// 6. Check for unmanaged scope permissions.
