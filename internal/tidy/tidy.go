@@ -58,6 +58,7 @@ func Scan(cfg *config.Config) (*ScanResult, error) {
 		if err != nil || len(data) == 0 {
 			continue
 		}
+		result.Scanned++
 		managed := managedRules[scopeName]
 		for _, kind := range []string{"allow", "deny"} {
 			for _, rule := range extractRules(data, kind) {

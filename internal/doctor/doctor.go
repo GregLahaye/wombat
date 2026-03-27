@@ -139,7 +139,7 @@ func Check(cfg *config.Config, discovered map[string][]source.Discovered) []Find
 				continue
 			}
 			if !desired[link] {
-				findings = append(findings, Finding{Severity: SevWarning, Message: "unmanaged symlink: " + link, Hint: "run wombat tidy"})
+				findings = append(findings, Finding{Severity: SevWarning, Message: "unmanaged symlink: " + link, Hint: "run wombat apply"})
 			}
 		}
 	}

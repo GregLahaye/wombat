@@ -30,11 +30,11 @@ func TidyCmd() *cobra.Command {
 			}
 
 			if len(result.Recommendations) == 0 {
-				fmt.Printf("Scanned %d project settings files. No consolidation needed.\n", result.Scanned)
+				fmt.Printf("Scanned %d settings files. No consolidation needed.\n", result.Scanned)
 				return nil
 			}
 
-			fmt.Printf("Scanned %d project settings files. Found %d recommendations:\n\n",
+			fmt.Printf("Scanned %d settings files. Found %d recommendations:\n\n",
 				result.Scanned, len(result.Recommendations))
 
 			for _, rec := range result.Recommendations {
